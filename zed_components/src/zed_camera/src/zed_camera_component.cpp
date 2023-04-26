@@ -3372,6 +3372,11 @@ bool ZedCamera::startCamera()
       return false;
     }
 
+    if (mResetOnFailure && mCamSerialNumber > 0) {
+      RCLCPP_ERROR(get_logger(), "Reset the dang thing.");
+      sl::Camera::reboot(mCamSerialNumber);
+    }
+
     rclcpp::sleep_for(std::chrono::seconds(mCamTimeoutSec));
   }
   // ----> Try to connect to a camera, to a stream, or to load an SVO

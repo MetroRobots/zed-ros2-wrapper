@@ -274,6 +274,7 @@ private:
   std::vector<std::vector<float>> mRoiParam;
   int mCamTimeoutSec = 5;
   int mMaxReconnectTemp = 5;
+  bool mResetOnFailure = true;
   bool mCameraSelfCalib = true;
   bool mCameraFlip = false;
   bool mOpenniDepthMode = false;  // 16 bit UC data in mm else 32F in m,
