@@ -70,6 +70,7 @@ ZedCamera::ZedCamera(const rclcpp::NodeOptions & options)
   mMappingQos(1),
   mObjDetQos(1),
   mBodyTrkQos(1),
+  mPedestrianQos(1),
   mClickedPtQos(1),
   mGnssFixQos(1),
   mClockQos(1),
@@ -3162,6 +3163,7 @@ void ZedCamera::initPublishers()
 
   std::string body_trk_topic_root = "body_trk";
   mBodyTrkTopic = mTopicRoot + body_trk_topic_root + "/skeletons";
+  mPedestrianTopic = mTopicRoot + body_trk_topic_root + "/pedestrians";
 
   std::string confImgRoot = "confidence";
   std::string conf_map_topic_name = "confidence_map";
@@ -4585,6 +4587,10 @@ bool ZedCamera::startBodyTracking()
   if (!mPubBodyTrk) {
     mPubBodyTrk = create_publisher<zed_interfaces::msg::ObjectsStamped>(mBodyTrkTopic, mBodyTrkQos);
     RCLCPP_INFO_STREAM(get_logger(), "Advertised on topic " << mPubBodyTrk->get_topic_name());
+  }
+  if (!mPubPedestrian) {
+    mPubPedestrian = create_publisher<social_nav_msgs::msg::Pedestrians>(mBodyTrkTopic, mPedestrianQos);
+    RCLCPP_INFO_STREAM(get_logger(), "Advertised on topic " << mPubPedestrian->get_topic_name());
   }
 
   DEBUG_BT("Body Tracking publisher created");
@@ -7302,24 +7308,26 @@ void ZedCamera::processBodies(rclcpp::Time t)
 {
   //DEBUG_BT("processBodies");
 
-  size_t bt_sub_count = 0;
+  size_t bt_sub_count = 0, ped_sub_count = 0;
 
   try {
     bt_sub_count = count_subscribers(mPubBodyTrk->get_topic_name());
+    ped_sub_count = count_subscribers(mPubPedestrian->get_topic_name());
   } catch (...) {
     rcutils_reset_error();
     DEBUG_STREAM_OD("processBodies: Exception while counting subscribers");
     return;
   }
 
-  if (bt_sub_count < 1) {
-    mBodyTrkSubscribed = false;
+  mBodyTrkSubscribed = bt_sub_count > 0;
+  mPedestrianSubscribed = ped_sub_count > 0;
+
+  if (!mBodyTrkSubscribed && !mPedestrianSubscribed)
+  {
     return;
   }
 
   sl_tools::StopWatch btElabTimer(get_clock());
-
-  mBodyTrkSubscribed = true;
 
   // ----> Process realtime dynamic parameters
   sl::BodyTrackingRuntimeParameters bt_params_rt;
@@ -7351,6 +7359,10 @@ void ZedCamera::processBodies(rclcpp::Time t)
   bodyMsg->header.frame_id = mLeftCamFrameId;
 
   bodyMsg->objects.resize(bodyCount);
+
+  social_nav_msgs::msg::Pedestrians pedsMsg;
+  pedsMsg.header = bodyMsg->header;
+  pedsMsg.pedestrians.resize(bodyCount);
 
   size_t idx = 0;
   for (auto body : bodies.body_list) {
@@ -7420,6 +7432,14 @@ void ZedCamera::processBodies(rclcpp::Time t)
         3 * kp_size * sizeof(float));
     }
 
+    social_nav_msgs::msg::Pedestrian& pedMsg = pedsMsg.pedestrians[idx];
+    pedMsg.identifier = label;
+    pedMsg.pose.x = body.position[0];
+    pedMsg.pose.y = body.position[1];
+    // TODO(dlu): Get Body Orientation
+    pedMsg.velocity.x = body.velocity[0];
+    pedMsg.velocity.y = body.velocity[1];
+    // TODO(dlu): Track Body Orientation
 
     // ----------------------------------
     // at the end of the loop
@@ -7434,6 +7454,9 @@ void ZedCamera::processBodies(rclcpp::Time t)
 
   DEBUG_STREAM_OD("Publishing BODY TRK message");
   mPubBodyTrk->publish(std::move(bodyMsg));
+
+  DEBUG_STREAM_OD("Publishing PEDESTRIAN message");
+  mPubPedestrian->publish(pedsMsg);
 
   // ----> Diagnostic information update
   mBodyTrkElabMean_sec->addValue(btElabTimer.toc());

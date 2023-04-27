@@ -102,6 +102,7 @@ set(DEPENDENCIES
     geographic_msgs
     sensor_msgs
     stereo_msgs
+    social_nav_msgs
     zed_interfaces
     std_srvs
     diagnostic_msgs
@@ -129,6 +130,7 @@ find_package(nav_msgs REQUIRED)
 find_package(nmea_msgs REQUIRED)
 find_package(geographic_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(social_nav_msgs REQUIRED)
 find_package(stereo_msgs REQUIRED)
 
 find_package(image_transport REQUIRED)
