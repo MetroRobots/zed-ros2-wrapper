@@ -234,6 +234,7 @@ private:
   std::string mPointcloudFusedTopic;
   std::string mObjectDetTopic;
   std::string mBodyTrkTopic;
+  std::string mPedestrianTopic;
   std::string mOdomPathTopic;
   std::string mMapPathTopic;
   std::string mClickedPtTopic;  // Clicked point
@@ -355,6 +356,7 @@ private:
   rclcpp::QoS mMappingQos;
   rclcpp::QoS mObjDetQos;
   rclcpp::QoS mBodyTrkQos;
+  rclcpp::QoS mPedestrianQos;
   rclcpp::QoS mClickedPtQos;
   rclcpp::QoS mGnssFixQos;
   // <---- Parameter variables
@@ -515,6 +517,7 @@ private:
   transfPub mPubCamImuTransf;
   objPub mPubObjDet;
   objPub mPubBodyTrk;
+  pedPub mPubPedestrian;
   depthInfoPub mPubDepthInfo;
   planePub mPubPlane;
   markerPub mPubMarker;
@@ -668,6 +671,7 @@ private:
   bool mBaroPublishing = false;
   bool mObjDetSubscribed = false;
   bool mBodyTrkSubscribed = false;
+  bool mPedestrianSubscribed = false;
 
   diagnostic_updater::Updater mDiagUpdater;  // Diagnostic Updater
 
