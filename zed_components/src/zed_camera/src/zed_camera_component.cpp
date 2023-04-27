@@ -4589,7 +4589,7 @@ bool ZedCamera::startBodyTracking()
     RCLCPP_INFO_STREAM(get_logger(), "Advertised on topic " << mPubBodyTrk->get_topic_name());
   }
   if (!mPubPedestrian) {
-    mPubPedestrian = create_publisher<social_nav_msgs::msg::Pedestrians>(mBodyTrkTopic, mPedestrianQos);
+    mPubPedestrian = create_publisher<social_nav_msgs::msg::Pedestrians>(mPedestrianTopic, mPedestrianQos);
     RCLCPP_INFO_STREAM(get_logger(), "Advertised on topic " << mPubPedestrian->get_topic_name());
   }
 
