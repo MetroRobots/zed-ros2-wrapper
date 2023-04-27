@@ -7063,7 +7063,15 @@ void ZedCamera::processBodies(rclcpp::Time t)
     pedMsg.identifier = label;
     pedMsg.pose.x = body.position[0];
     pedMsg.pose.y = body.position[1];
-    // TODO(dlu): Get Body Orientation
+
+    tf2::Quaternion quad(body.global_root_orientation[0],
+                         body.global_root_orientation[1],
+                         body.global_root_orientation[2],
+                         body.global_root_orientation[3]);
+    tf2::Matrix3x3 tfMat(quad);
+    double tempRoll, tempPitch;
+    tfMat.getRPY(tempRoll, tempPitch, pedMsg.pose.theta);
+
     pedMsg.velocity.x = body.velocity[0];
     pedMsg.velocity.y = body.velocity[1];
     // TODO(dlu): Track Body Orientation
@@ -7072,7 +7080,6 @@ void ZedCamera::processBodies(rclcpp::Time t)
     // at the end of the loop
 
     // TODO(Walter) Add support for
-    //body.global_root_orientation;
     //body.local_orientation_per_joint;
     //body.local_orientation_per_joint;
 
