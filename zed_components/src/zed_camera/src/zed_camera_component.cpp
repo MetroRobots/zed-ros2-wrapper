@@ -3572,6 +3572,7 @@ bool ZedCamera::startCamera()
     }
 
     if (mResetOnFailure && mCamSerialNumber > 0) {
+      mZed.close();
       RCLCPP_ERROR(get_logger(), "Reset the dang thing.");
       sl::Camera::reboot(mCamSerialNumber);
     }
