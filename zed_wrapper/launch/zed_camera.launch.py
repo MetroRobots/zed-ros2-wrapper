@@ -200,10 +200,8 @@ def generate_launch_description():
                 default_value=TextSubstitution(text=default_xacro_path),
                 description='Path to the camera URDF file as a xacro file.'),
             DeclareLaunchArgument(
-                'ros_params_override_path',
-                default_value='',
-                description='The path to an additional parameters file to override the defaults'),
-            DeclareLaunchArgument(
+==== BASE ====
+==== BASE ====
                 'svo_path',
                 default_value=TextSubstitution(text='live'),
                 description='Path to an input SVO file. Note: overrides the parameter `general.svo_file` in `common.yaml`.'),
