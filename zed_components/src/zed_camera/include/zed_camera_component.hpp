@@ -344,6 +344,7 @@ private:
   double mBodyTrkPredTimeout = 0.5;
   double mBodyTrkConfThresh = 50.0;
   int mBodyTrkMinKp = 10;
+  std::unordered_map<std::string, double> mBodyTrkPrevYaw;
 
   // TODO(Walter) remove QoS parameters, use instead the new ROS2 Humble QoS settings engine
 
@@ -678,6 +679,7 @@ private:
   // ----> Timestamps
   rclcpp::Time mFrameTimestamp;
   rclcpp::Time mGnssTimestamp;
+  rclcpp::Time mPrevTimestamp;
   // <---- Timestamps
 
   // ----> SVO Recording parameters
