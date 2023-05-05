@@ -362,6 +362,7 @@ private:
   double mBodyTrkPredTimeout = 0.5;
   double mBodyTrkConfThresh = 50.0;
   int mBodyTrkMinKp = 10;
+  std::unordered_map<std::string, double> mBodyTrkPrevYaw;
 
   #if (ZED_SDK_MINOR_VERSION == 0 && ZED_SDK_PATCH_VERSION >= 6)
   double mPdMaxDistanceThreshold = 0.15;
@@ -736,6 +737,7 @@ private:
   sl::Timestamp mLastTs_grab = 0;  // Used to calculate stable publish frequency
   rclcpp::Time mFrameTimestamp;
   rclcpp::Time mGnssTimestamp;
+  rclcpp::Time mPrevTimestamp;
   rclcpp::Time mLastTs_imu;
   rclcpp::Time mLastTs_baro;
   rclcpp::Time mLastTs_mag;

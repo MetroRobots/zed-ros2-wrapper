@@ -5265,6 +5265,7 @@ void ZedCamera::threadFunc_zedGrab()
       }
 
       // ----> Timestamp
+      mPrevTimestamp = mFrameTimestamp;
       if (mSvoMode) {
         mFrameTimestamp = sl_tools::slTime2Ros(mZed.getTimestamp(sl::TIME_REFERENCE::CURRENT));
       } else if (mSimMode) {
@@ -7363,6 +7364,8 @@ void ZedCamera::processBodies(rclcpp::Time t)
   social_nav_msgs::msg::Pedestrians pedsMsg;
   pedsMsg.header = bodyMsg->header;
   pedsMsg.pedestrians.resize(bodyCount);
+  double deltaT = (mFrameTimestamp - mPrevTimestamp).seconds();
+  std::unordered_map<std::string, double> currentYaw;
 
   size_t idx = 0;
   for (auto body : bodies.body_list) {
@@ -7446,8 +7449,12 @@ void ZedCamera::processBodies(rclcpp::Time t)
     tfMat.getRPY(tempRoll, tempPitch, pedMsg.pose.theta);
     pedMsg.velocity.x = body.velocity[0];
     pedMsg.velocity.y = body.velocity[1];
-    // TODO(dlu): Track Body Orientation
 
+    currentYaw[label] = pedMsg.pose.theta;
+    if (mBodyTrkPrevYaw.count(label))
+    {
+      pedMsg.velocity.theta = (pedMsg.pose.theta - mBodyTrkPrevYaw[label]) / deltaT;
+    }
     // ----------------------------------
     // at the end of the loop
 
@@ -7463,6 +7470,7 @@ void ZedCamera::processBodies(rclcpp::Time t)
 
   DEBUG_STREAM_OD("Publishing PEDESTRIAN message");
   mPubPedestrian->publish(pedsMsg);
+  mBodyTrkPrevYaw.swap(currentYaw);
 
   // ----> Diagnostic information update
   mBodyTrkElabMean_sec->addValue(btElabTimer.toc());
