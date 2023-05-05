@@ -7444,13 +7444,6 @@ void ZedCamera::processBodies(rclcpp::Time t)
     tf2::Matrix3x3 tfMat(quad);
     double tempRoll, tempPitch;
     tfMat.getRPY(tempRoll, tempPitch, pedMsg.pose.theta);
-    RCLCPP_WARN_STREAM(
-      get_logger(),
-      "Quat " << body.global_root_orientation[0] << " " <<
-                           body.global_root_orientation[1]<< " " <<
-                           body.global_root_orientation[2]<< " " <<
-                           body.global_root_orientation[3]<< " | " << tempRoll << " " <<tempPitch<< " " << pedMsg.pose.theta<< " | " << kp_size);
-
     pedMsg.velocity.x = body.velocity[0];
     pedMsg.velocity.y = body.velocity[1];
     // TODO(dlu): Track Body Orientation
