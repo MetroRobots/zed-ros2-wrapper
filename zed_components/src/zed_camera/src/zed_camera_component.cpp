@@ -6951,6 +6951,7 @@ void ZedCamera::processDetectedObjects(rclcpp::Time t)
         // xz is index 2, skipping.
         pedMsg.covariance[2] = objMsg->objects[idx].position_covariance[1];  // yx is the same as xy.
         pedMsg.covariance[3] = objMsg->objects[idx].position_covariance[3];  // yy is index 3
+        pedsMsg.pedestrians.push_back(pedMsg);
     }
     // at the end of the loop
     idx++;
@@ -6958,6 +6959,8 @@ void ZedCamera::processDetectedObjects(rclcpp::Time t)
 
   //DEBUG_STREAM_OD("Publishing OBJ DET message");
   mPubObjDet->publish(std::move(objMsg));
+
+  mPubObjDetPed->publish(pedsMsg);
 
   // ----> Diagnostic information update
   mObjDetElabMean_sec->addValue(odElabTimer.toc());
