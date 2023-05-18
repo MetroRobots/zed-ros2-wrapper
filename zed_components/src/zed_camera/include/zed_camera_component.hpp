@@ -237,6 +237,7 @@ private:
   std::string mGeoPoseStatusTopic;
   std::string mPointcloudFusedTopic;
   std::string mObjectDetTopic;
+  std::string mObjectDetPedTopic;
   std::string mBodyTrkTopic;
   std::string mPedestrianTopic;
   std::string mPedestrianWithCovarTopic;
@@ -380,6 +381,7 @@ private:
   rclcpp::QoS mPoseQos;
   rclcpp::QoS mMappingQos;
   rclcpp::QoS mObjDetQos;
+  rclcpp::QoS mObjDetPedQos;
   rclcpp::QoS mBodyTrkQos;
   rclcpp::QoS mPedestrianQos;
   rclcpp::QoS mPedestrianWithCovarQos;
@@ -556,6 +558,7 @@ private:
   tempPub mPubTempR;
   transfPub mPubCamImuTransf;
   objPub mPubObjDet;
+  varPedPub mPubObjDetPed;
   objPub mPubBodyTrk;
   pedPub mPubPedestrian;
   varPedPub mPubPedestrianWithCovar;
@@ -713,6 +716,7 @@ private:
   bool mMagPublishing = false;
   bool mBaroPublishing = false;
   bool mObjDetSubscribed = false;
+  bool mObjDetPedSubscribed = false;
   bool mBodyTrkSubscribed = false;
   bool mPedestrianSubscribed = false;
   bool mPedestrianWithCovarSubscribed = false;

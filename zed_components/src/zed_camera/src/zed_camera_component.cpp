@@ -69,6 +69,7 @@ ZedCamera::ZedCamera(const rclcpp::NodeOptions & options)
   mPoseQos(1),
   mMappingQos(1),
   mObjDetQos(1),
+  mObjDetPedQos(1),
   mBodyTrkQos(1),
   mPedestrianQos(1),
   mPedestrianWithCovarQos(1),
@@ -3161,6 +3162,7 @@ void ZedCamera::initPublishers()
 
   std::string object_det_topic_root = "obj_det";
   mObjectDetTopic = mTopicRoot + object_det_topic_root + "/objects";
+  mObjectDetPedTopic = mTopicRoot + object_det_topic_root + "/pedestrians";
 
   std::string body_trk_topic_root = "body_trk";
   mBodyTrkTopic = mTopicRoot + body_trk_topic_root + "/skeletons";
@@ -4497,6 +4499,11 @@ bool ZedCamera::startObjDetect()
   if (!mPubObjDet) {
     mPubObjDet = create_publisher<zed_interfaces::msg::ObjectsStamped>(mObjectDetTopic, mObjDetQos);
     RCLCPP_INFO_STREAM(get_logger(), "Advertised on topic " << mPubObjDet->get_topic_name());
+  }
+
+  if (!mPubObjDetPed) {
+    mPubObjDetPed = create_publisher<social_nav_msgs::msg::PedestriansWithCovariance>(mObjectDetPedTopic, mObjDetPedQos);
+    RCLCPP_INFO_STREAM(get_logger(), "Advertised on topic " << mPubObjDetPed->get_topic_name());
   }
 
   mObjDetRunning = true;
@@ -7178,24 +7185,26 @@ void ZedCamera::publishGnssPose()
 
 void ZedCamera::processDetectedObjects(rclcpp::Time t)
 {
-  size_t objdet_sub_count = 0;
+  size_t objdet_sub_count = 0, objdet_ped_sub_count = 0;
 
   try {
     objdet_sub_count = count_subscribers(mPubObjDet->get_topic_name());
+    objdet_ped_sub_count = count_subscribers(mPubObjDetPed->get_topic_name());
   } catch (...) {
     rcutils_reset_error();
     DEBUG_STREAM_OD("processDetectedObjects: Exception while counting subscribers");
     return;
   }
 
-  if (objdet_sub_count < 1) {
-    mObjDetSubscribed = false;
+  mObjDetSubscribed = objdet_sub_count > 0;
+  mObjDetPedSubscribed = objdet_ped_sub_count > 0;
+
+  if (!mObjDetSubscribed && !mObjDetPedSubscribed) {
     return;
   }
 
   sl_tools::StopWatch odElabTimer(get_clock());
 
-  mObjDetSubscribed = true;
 
   sl::ObjectDetectionRuntimeParameters objectTracker_parameters_rt;
 
@@ -7254,6 +7263,9 @@ void ZedCamera::processDetectedObjects(rclcpp::Time t)
 
   objMsg->objects.resize(objCount);
 
+  social_nav_msgs::msg::PedestriansWithCovariance pedsMsg;
+  pedsMsg.header = objMsg->header;
+
   size_t idx = 0;
   for (auto data : objects.object_list) {
     objMsg->objects[idx].label = sl::toString(data.label).c_str();
@@ -7298,6 +7310,22 @@ void ZedCamera::processDetectedObjects(rclcpp::Time t)
     memcpy(&(objMsg->objects[idx].head_position[0]), &(data.head_position[0]), 3 * sizeof(float));
 
     objMsg->objects[idx].skeleton_available = false;
+
+    if (data.label == sl::OBJECT_CLASS::PERSON)
+    {
+        social_nav_msgs::msg::PedestrianWithCovariance pedMsg;
+        pedMsg.pedestrian.identifier = "Person" + data.id;
+        pedMsg.pedestrian.pose.x = data.position[0];
+        pedMsg.pedestrian.pose.y = data.position[1];
+        // TODO: orientation??
+        pedMsg.pedestrian.velocity.x = data.velocity[0];
+        pedMsg.pedestrian.velocity.y = data.velocity[1];
+        pedMsg.covariance[0] = objMsg->objects[idx].position_covariance[0];  // xx is index 0
+        pedMsg.covariance[1] = objMsg->objects[idx].position_covariance[1];  // xy is index 1.
+        // xz is index 2, skipping.
+        pedMsg.covariance[2] = objMsg->objects[idx].position_covariance[1];  // yx is the same as xy.
+        pedMsg.covariance[3] = objMsg->objects[idx].position_covariance[3];  // yy is index 3
+    }
     // at the end of the loop
     idx++;
   }
