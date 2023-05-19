@@ -6940,7 +6940,7 @@ void ZedCamera::processDetectedObjects(rclcpp::Time t)
     if (data.label == sl::OBJECT_CLASS::PERSON)
     {
         social_nav_msgs::msg::PedestrianWithCovariance pedMsg;
-        pedMsg.pedestrian.identifier = "Person" + data.id;
+        pedMsg.pedestrian.identifier = "Person" + std::to_string(data.id);
         pedMsg.pedestrian.pose.x = data.position[0];
         pedMsg.pedestrian.pose.y = data.position[1];
         // TODO: orientation??
