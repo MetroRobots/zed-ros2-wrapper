@@ -4942,6 +4942,24 @@ bool ZedCamera::getGnss2BaseTransform()
   return true;
 }
 
+bool ZedCamera::getOdom2CameraTransform()
+{
+  try {
+    geometry_msgs::msg::TransformStamped o2c =
+      mTfBuffer->lookupTransform(mOdomFrameId, mLeftCamFrameId, TIMEZERO_SYS, rclcpp::Duration(1, 0));
+
+    tf2::Transform odom2CameraTrans;
+    tf2::fromMsg(o2c.transform, odom2CameraTrans);
+    mCamera2OdomTransf = odom2CameraTrans.inverse();
+  } catch (tf2::TransformException & ex) {
+    rclcpp::Clock steady_clock(RCL_STEADY_TIME);
+    RCLCPP_WARN_THROTTLE(get_logger(), steady_clock, 5.0,
+      "Failed to get Odom2Camera Transform");
+    return false;
+  }
+  return true;
+}
+
 bool ZedCamera::setPose(float xt, float yt, float zt, float rr, float pr, float yr)
 {
   initTransforms();
@@ -7394,6 +7412,8 @@ void ZedCamera::processBodies(rclcpp::Time t)
 
   DEBUG_STREAM_BT("Detected " << bodyCount << " bodies");
 
+  getOdom2CameraTransform();
+
   objDetMsgPtr bodyMsg = std::make_unique<zed_interfaces::msg::ObjectsStamped>();
 
   bodyMsg->header.stamp = t;
@@ -7402,7 +7422,8 @@ void ZedCamera::processBodies(rclcpp::Time t)
   bodyMsg->objects.resize(bodyCount);
 
   social_nav_msgs::msg::Pedestrians pedsMsg;
-  pedsMsg.header = bodyMsg->header;
+  pedsMsg.header.stamp = t;
+  pedsMsg.header.frame_id = mOdomFrameId;
   pedsMsg.pedestrians.resize(bodyCount);
   double deltaT = (mFrameTimestamp - mPrevTimestamp).seconds();
   std::unordered_map<std::string, double> currentYaw;
@@ -7481,18 +7502,31 @@ void ZedCamera::processBodies(rclcpp::Time t)
 
     social_nav_msgs::msg::Pedestrian& pedMsg = pedsMsg.pedestrians[idx];
     pedMsg.identifier = label;
-    pedMsg.pose.x = body.position[0];
-    pedMsg.pose.y = body.position[1];
 
-    tf2::Quaternion quad(body.global_root_orientation[0],
-                         body.global_root_orientation[1],
-                         body.global_root_orientation[2],
-                         body.global_root_orientation[3]);
-    tf2::Matrix3x3 tfMat(quad);
+    tf2::Transform body_pose;
+    body_pose.setOrigin(
+      tf2::Vector3(body.position[0], body.position[1], body.position[0])
+    );
+    body_pose.setRotation(
+      tf2::Quaternion(body.global_root_orientation[0],
+                      body.global_root_orientation[1],
+                      body.global_root_orientation[2],
+                      body.global_root_orientation[3]));
+
+    tf2::Transform bodyInOdom = body_pose * mCamera2OdomTransf;
+    tf2::Vector3 translation = bodyInOdom.getOrigin();
+
+    pedMsg.pose.x = translation.x();
+    pedMsg.pose.y = translation.y();
+    tf2::Matrix3x3 tfMat(bodyInOdom.getRotation());
     double tempRoll, tempPitch;
     tfMat.getRPY(tempRoll, tempPitch, pedMsg.pose.theta);
-    pedMsg.velocity.x = body.velocity[0];
-    pedMsg.velocity.y = body.velocity[1];
+
+    tf2::Vector3 velocityV = tf2::Vector3(body.velocity[0], body.velocity[1], body.velocity[2]);
+    tf2::Vector3 vinodom =  mCamera2OdomTransf * velocityV;
+
+    pedMsg.velocity.x = vinodom.x();
+    pedMsg.velocity.y = vinodom.y();
 
     currentYaw[label] = pedMsg.pose.theta;
     if (mBodyTrkPrevYaw.count(label))
