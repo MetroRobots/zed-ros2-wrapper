@@ -188,6 +188,7 @@ protected:
   bool getSens2CameraTransform();
   bool getCamera2BaseTransform();
   bool getGnss2BaseTransform();
+  bool getOdom2CameraTransform();
 
   void startFusedPcTimer(double fusedPcRate);
   void startPathPubTimer(double pathTimerRate);
@@ -460,6 +461,7 @@ private:
   tf2::Transform mCamera2BaseTransf;    // Coordinates of the base frame in camera frame
   tf2::Transform mMap2UtmTransf;        // Coordinates of the UTM frame in map frame
   tf2::Transform mGnss2BaseTransf;      // Coordinates of the base in GNSS sensor frame
+  tf2::Transform mCamera2OdomTransf;
   // <---- TF Transforms
 
   // ----> TF Transforms Flags
