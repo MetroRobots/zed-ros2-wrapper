@@ -7339,7 +7339,7 @@ void ZedCamera::processDetectedObjects(rclcpp::Time t)
 
         tf2::Transform body_pose;
         body_pose.setOrigin(
-          tf2::Vector3(data.position[0], data.position[1], data.position[0])
+          tf2::Vector3(data.position[0], data.position[1], data.position[2])
         );
         // TODO: set rotation??
 
@@ -7349,11 +7349,18 @@ void ZedCamera::processDetectedObjects(rclcpp::Time t)
         pedMsg.pedestrian.pose.x = translation.x();
         pedMsg.pedestrian.pose.y = translation.y();
 
-        tf2::Vector3 velocityV = tf2::Vector3(data.velocity[0], data.velocity[1], data.velocity[2]);
-        tf2::Vector3 vinodom =  mCamera2OdomTransf * velocityV;
+        tf2::Transform velocity_tf;
+        velocity_tf.setOrigin(
+          tf2::Vector3(data.velocity[0], data.velocity[1], data.velocity[2])
+        );
+        tf2::Transform velInOdom =  velocity_tf * mCamera2OdomTransf;
+        tf2::Vector3 velVec = velInOdom.getOrigin();
 
-        pedMsg.pedestrian.velocity.x = vinodom.x();
-        pedMsg.pedestrian.velocity.y = vinodom.y();
+        pedMsg.pedestrian.velocity.x = velVec.x();
+        pedMsg.pedestrian.velocity.y = velVec.y();
+
+        RCLCPP_INFO(get_logger(), "VO %.2f %.2f %.2f", data.velocity[0], data.velocity[1], data.velocity[2]);
+        RCLCPP_INFO(get_logger(), "VV %.2f %.2f %.2f", velVec.x(), velVec.y(), velVec.z());
 
         pedMsg.covariance[0] = objMsg->objects[idx].position_covariance[0];  // xx is index 0
         pedMsg.covariance[1] = objMsg->objects[idx].position_covariance[1];  // xy is index 1.
