@@ -6895,6 +6895,8 @@ void ZedCamera::processDetectedObjects(rclcpp::Time t)
     return;
   }
 
+  getOdom2CameraTransform();
+
   // DEBUG_STREAM_OD( "Detected " << objects.object_list.size()
   // << " objects");
 
@@ -6908,7 +6910,8 @@ void ZedCamera::processDetectedObjects(rclcpp::Time t)
   objMsg->objects.resize(objCount);
 
   social_nav_msgs::msg::PedestriansWithCovariance pedsMsg;
-  pedsMsg.header = objMsg->header;
+  pedsMsg.header.stamp = t;
+  pedsMsg.header.frame_id = mOdomFrameId;
 
   size_t idx = 0;
   for (auto data : objects.object_list) {
@@ -6959,11 +6962,25 @@ void ZedCamera::processDetectedObjects(rclcpp::Time t)
     {
         social_nav_msgs::msg::PedestrianWithCovariance pedMsg;
         pedMsg.pedestrian.identifier = "Person" + std::to_string(data.id);
-        pedMsg.pedestrian.pose.x = data.position[0];
-        pedMsg.pedestrian.pose.y = data.position[1];
-        // TODO: orientation??
-        pedMsg.pedestrian.velocity.x = data.velocity[0];
-        pedMsg.pedestrian.velocity.y = data.velocity[1];
+
+        tf2::Transform body_pose;
+        body_pose.setOrigin(
+          tf2::Vector3(data.position[0], data.position[1], data.position[0])
+        );
+        // TODO: set rotation??
+
+        tf2::Transform bodyInOdom = body_pose * mCamera2OdomTransf;
+        tf2::Vector3 translation = bodyInOdom.getOrigin();
+
+        pedMsg.pedestrian.pose.x = translation.x();
+        pedMsg.pedestrian.pose.y = translation.y();
+
+        tf2::Vector3 velocityV = tf2::Vector3(data.velocity[0], data.velocity[1], data.velocity[2]);
+        tf2::Vector3 vinodom =  mCamera2OdomTransf * velocityV;
+
+        pedMsg.pedestrian.velocity.x = vinodom.x();
+        pedMsg.pedestrian.velocity.y = vinodom.y();
+
         pedMsg.covariance[0] = objMsg->objects[idx].position_covariance[0];  // xx is index 0
         pedMsg.covariance[1] = objMsg->objects[idx].position_covariance[1];  // xy is index 1.
         // xz is index 2, skipping.
