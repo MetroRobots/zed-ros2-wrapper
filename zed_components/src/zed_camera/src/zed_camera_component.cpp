@@ -6964,6 +6964,7 @@ void ZedCamera::processDetectedObjects(rclcpp::Time t)
         pedMsg.pedestrian.identifier = "Person" + std::to_string(data.id);
 
         tf2::Transform body_pose;
+        body_pose.setIdentity();
         body_pose.setOrigin(
           tf2::Vector3(data.position[0], data.position[1], data.position[2])
         );
@@ -6976,6 +6977,7 @@ void ZedCamera::processDetectedObjects(rclcpp::Time t)
         pedMsg.pedestrian.pose.y = translation.y();
 
         tf2::Transform velocity_tf;
+        velocity_tf.setIdentity();
         velocity_tf.setOrigin(
           tf2::Vector3(data.velocity[0], data.velocity[1], data.velocity[2])
         );
@@ -6984,9 +6986,6 @@ void ZedCamera::processDetectedObjects(rclcpp::Time t)
 
         pedMsg.pedestrian.velocity.x = velVec.x();
         pedMsg.pedestrian.velocity.y = velVec.y();
-
-        RCLCPP_INFO(get_logger(), "VO %.2f %.2f %.2f", data.velocity[0], data.velocity[1], data.velocity[2]);
-        RCLCPP_INFO(get_logger(), "VV %.2f %.2f %.2f", velVec.x(), velVec.y(), velVec.z());
 
         pedMsg.covariance[0] = objMsg->objects[idx].position_covariance[0];  // xx is index 0
         pedMsg.covariance[1] = objMsg->objects[idx].position_covariance[1];  // xy is index 1.
