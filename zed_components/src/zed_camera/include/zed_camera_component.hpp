@@ -461,7 +461,8 @@ private:
   tf2::Transform mCamera2BaseTransf;    // Coordinates of the base frame in camera frame
   tf2::Transform mMap2UtmTransf;        // Coordinates of the UTM frame in map frame
   tf2::Transform mGnss2BaseTransf;      // Coordinates of the base in GNSS sensor frame
-  tf2::Transform mCamera2OdomTransf;
+  tf2::Transform mCamera2OdomTransf,
+  mOdom2CameraTransf;
   // <---- TF Transforms
 
   // ----> TF Transforms Flags
@@ -524,12 +525,14 @@ private:
   transfPub mPubCamImuTransf;
   objPub mPubObjDet;
   varPedPub mPubObjDetPed;
+  varPedPub mPubObjDetPed2;
   objPub mPubBodyTrk;
   pedPub mPubPedestrian;
   varPedPub mPubPedestrianWithCovar;
   depthInfoPub mPubDepthInfo;
   planePub mPubPlane;
   markerPub mPubMarker;
+  std::shared_ptr<rclcpp::Publisher<tf2_msgs::msg::TFMessage>> mPubTf;
 
   geoPosePub mPubGeoPose;
   poseStatusPub mPubGeoPoseStatus;

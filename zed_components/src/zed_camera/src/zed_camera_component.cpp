@@ -3097,6 +3097,8 @@ void ZedCamera::initPublishers()
     RCLCPP_INFO_STREAM(get_logger(), "Advertised on topic: " << mPubDepthInfo->get_topic_name());
   }
 
+  mPubTf = create_publisher<tf2_msgs::msg::TFMessage>("/important_transforms", 1);
+
   mPubStereo =
     image_transport::create_publisher(this, stereo_topic, mVideoQos.get_rmw_qos_profile());
   RCLCPP_INFO_STREAM(get_logger(), "Advertised on topic: " << mPubStereo.getTopic());
@@ -4311,6 +4313,7 @@ bool ZedCamera::startObjDetect()
 
   if (!mPubObjDetPed) {
     mPubObjDetPed = create_publisher<social_nav_msgs::msg::PedestriansWithCovariance>(mObjectDetPedTopic, mObjDetPedQos);
+    mPubObjDetPed2= create_publisher<social_nav_msgs::msg::PedestriansWithCovariance>(mObjectDetPedTopic + "_orig", mObjDetPedQos);
     RCLCPP_INFO_STREAM(get_logger(), "Advertised on topic " << mPubObjDetPed->get_topic_name());
   }
 
@@ -4759,9 +4762,8 @@ bool ZedCamera::getOdom2CameraTransform()
     geometry_msgs::msg::TransformStamped o2c =
       mTfBuffer->lookupTransform(mOdomFrameId, mLeftCamFrameId, TIMEZERO_SYS, rclcpp::Duration(1, 0));
 
-    tf2::Transform odom2CameraTrans;
-    tf2::fromMsg(o2c.transform, odom2CameraTrans);
-    mCamera2OdomTransf = odom2CameraTrans.inverse();
+    tf2::fromMsg(o2c.transform, mOdom2CameraTransf);
+    mCamera2OdomTransf = mOdom2CameraTransf.inverse();
   } catch (tf2::TransformException & ex) {
     rclcpp::Clock steady_clock(RCL_STEADY_TIME);
     RCLCPP_WARN_THROTTLE(get_logger(), steady_clock, 5.0,
@@ -6826,6 +6828,18 @@ void ZedCamera::publishGnssPose()
   }
 }
 
+void addTf(tf2_msgs::msg::TFMessage& important_tfs,
+           const tf2::Transform transform, const std::string& parent, const std::string& child)
+{
+  geometry_msgs::msg::TransformStamped msg;
+  msg.header.frame_id = parent;
+  msg.child_frame_id = child;
+  msg.transform =
+  tf2::toMsg(transform);
+
+  important_tfs.transforms.push_back(msg);
+}
+
 void ZedCamera::processDetectedObjects(rclcpp::Time t)
 {
   size_t objdet_sub_count = 0, objdet_ped_sub_count = 0;
@@ -6897,6 +6911,18 @@ void ZedCamera::processDetectedObjects(rclcpp::Time t)
 
   getOdom2CameraTransform();
 
+  tf2_msgs::msg::TFMessage important_tfs;
+  addTf(important_tfs, mCamera2OdomTransf, mLeftCamFrameId,
+  mOdomFrameId);
+  addTf(important_tfs, mOdom2CameraTransf, mOdomFrameId,
+  mLeftCamFrameId);
+  addTf(important_tfs, mOdom2BaseTransf, mOdomFrameId
+  , mBaseFrameId);
+  addTf(important_tfs, mSensor2BaseTransf, mDepthFrameId, mBaseFrameId);
+  addTf(important_tfs, mSensor2CameraTransf, mDepthFrameId, mCameraFrameId);
+
+  mPubTf->publish(important_tfs);
+
   // DEBUG_STREAM_OD( "Detected " << objects.object_list.size()
   // << " objects");
 
@@ -6912,6 +6938,10 @@ void ZedCamera::processDetectedObjects(rclcpp::Time t)
   social_nav_msgs::msg::PedestriansWithCovariance pedsMsg;
   pedsMsg.header.stamp = t;
   pedsMsg.header.frame_id = mOdomFrameId;
+
+  social_nav_msgs::msg::PedestriansWithCovariance pedsMsg2;
+  pedsMsg2.header.stamp = t;
+  pedsMsg2.header.frame_id = mLeftCamFrameId;
 
   size_t idx = 0;
   for (auto data : objects.object_list) {
@@ -6994,6 +7024,15 @@ void ZedCamera::processDetectedObjects(rclcpp::Time t)
         pedMsg.covariance[2] = objMsg->objects[idx].position_covariance[1];  // yx is the same as xy.
         pedMsg.covariance[3] = objMsg->objects[idx].position_covariance[3];  // yy is index 3
         pedsMsg.pedestrians.push_back(pedMsg);
+
+        social_nav_msgs::msg::PedestrianWithCovariance pedMsg2;
+        pedMsg2.pedestrian.identifier = "Person" + std::to_string(data.id);
+        pedMsg2.pedestrian.pose.x = data.position[0];
+        pedMsg2.pedestrian.pose.y = data.position[1];
+        pedMsg2.pedestrian.velocity.x = data.velocity[0];
+        pedMsg2.pedestrian.velocity.y = data.velocity[1];
+
+        pedsMsg2.pedestrians.push_back(pedMsg2);
     }
     // at the end of the loop
     idx++;
@@ -7003,6 +7042,7 @@ void ZedCamera::processDetectedObjects(rclcpp::Time t)
   mPubObjDet->publish(std::move(objMsg));
 
   mPubObjDetPed->publish(pedsMsg);
+  mPubObjDetPed2->publish(pedsMsg2);
 
   // ----> Diagnostic information update
   mObjDetElabMean_sec->addValue(odElabTimer.toc());
