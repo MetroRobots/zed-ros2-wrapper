@@ -4942,24 +4942,6 @@ bool ZedCamera::getGnss2BaseTransform()
   return true;
 }
 
-bool ZedCamera::getOdom2CameraTransform()
-{
-  try {
-    geometry_msgs::msg::TransformStamped o2c =
-      mTfBuffer->lookupTransform(mOdomFrameId, mLeftCamFrameId, TIMEZERO_SYS, rclcpp::Duration(1, 0));
-
-    tf2::Transform odom2CameraTrans;
-    tf2::fromMsg(o2c.transform, odom2CameraTrans);
-    mCamera2OdomTransf = odom2CameraTrans.inverse();
-  } catch (tf2::TransformException & ex) {
-    rclcpp::Clock steady_clock(RCL_STEADY_TIME);
-    RCLCPP_WARN_THROTTLE(get_logger(), steady_clock, 5.0,
-      "Failed to get Odom2Camera Transform");
-    return false;
-  }
-  return true;
-}
-
 bool ZedCamera::setPose(float xt, float yt, float zt, float rr, float pr, float yr)
 {
   initTransforms();
@@ -7269,8 +7251,6 @@ void ZedCamera::processDetectedObjects(rclcpp::Time t)
     return;
   }
 
-  getOdom2CameraTransform();
-
   // DEBUG_STREAM_OD( "Detected " << objects.object_list.size()
   // << " objects");
 
@@ -7337,29 +7317,25 @@ void ZedCamera::processDetectedObjects(rclcpp::Time t)
         social_nav_msgs::msg::PedestrianWithCovariance pedMsg;
         pedMsg.pedestrian.identifier = "Person" + std::to_string(data.id);
 
-        tf2::Transform body_pose;
-        body_pose.setIdentity();
-        body_pose.setOrigin(
-          tf2::Vector3(data.position[0], data.position[1], data.position[2])
-        );
-        // TODO: set rotation??
+        geometry_msgs::msg::PointStamped cam_point, odom_point;
+        cam_point.header = objMsg->header;
+        cam_point.point.x = data.position[0];
+        cam_point.point.y = data.position[1];
+        cam_point.point.z = data.position[2];
+        odom_point = mTfBuffer->transform(cam_point, pedsMsg.header.frame_id);
 
-        tf2::Transform bodyInOdom = body_pose * mCamera2OdomTransf;
-        tf2::Vector3 translation = bodyInOdom.getOrigin();
+        pedMsg.pedestrian.pose.x = odom_point.point.x;
+        pedMsg.pedestrian.pose.y = odom_point.point.y;
 
-        pedMsg.pedestrian.pose.x = translation.x();
-        pedMsg.pedestrian.pose.y = translation.y();
+        geometry_msgs::msg::Vector3Stamped velocity_v, new_v;
+        velocity_v.header = objMsg->header;
+        velocity_v.vector.x = data.velocity[0];
+        velocity_v.vector.y = data.velocity[1];
+        velocity_v.vector.z = data.velocity[2];
+        new_v = mTfBuffer->transform(velocity_v, pedsMsg.header.frame_id);
 
-        tf2::Transform velocity_tf;
-        velocity_tf.setIdentity();
-        velocity_tf.setOrigin(
-          tf2::Vector3(data.velocity[0], data.velocity[1], data.velocity[2])
-        );
-        tf2::Transform velInOdom =  velocity_tf * mCamera2OdomTransf;
-        tf2::Vector3 velVec = velInOdom.getOrigin();
-
-        pedMsg.pedestrian.velocity.x = velVec.x();
-        pedMsg.pedestrian.velocity.y = velVec.y();
+        pedMsg.pedestrian.velocity.x = new_v.vector.x;
+        pedMsg.pedestrian.velocity.y = new_v.vector.y;
 
         pedMsg.covariance[0] = objMsg->objects[idx].position_covariance[0];  // xx is index 0
         pedMsg.covariance[1] = objMsg->objects[idx].position_covariance[1];  // xy is index 1.
@@ -7434,8 +7410,6 @@ void ZedCamera::processBodies(rclcpp::Time t)
   size_t bodyCount = bodies.body_list.size();
 
   DEBUG_STREAM_BT("Detected " << bodyCount << " bodies");
-
-  getOdom2CameraTransform();
 
   objDetMsgPtr bodyMsg = std::make_unique<zed_interfaces::msg::ObjectsStamped>();
 
@@ -7536,7 +7510,7 @@ void ZedCamera::processBodies(rclcpp::Time t)
                       body.global_root_orientation[2],
                       body.global_root_orientation[3]));
 
-    tf2::Transform bodyInOdom = body_pose * mCamera2OdomTransf;
+    /*tf2::Transform bodyInOdom = body_pose * mCamera2OdomTransf;
     tf2::Vector3 translation = bodyInOdom.getOrigin();
 
     pedMsg.pose.x = translation.x();
@@ -7549,7 +7523,7 @@ void ZedCamera::processBodies(rclcpp::Time t)
     tf2::Vector3 vinodom =  mCamera2OdomTransf * velocityV;
 
     pedMsg.velocity.x = vinodom.x();
-    pedMsg.velocity.y = vinodom.y();
+    pedMsg.velocity.y = vinodom.y();*/
 
     currentYaw[label] = pedMsg.pose.theta;
     if (mBodyTrkPrevYaw.count(label))
