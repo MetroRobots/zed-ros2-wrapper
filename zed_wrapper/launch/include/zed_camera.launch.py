@@ -133,6 +133,7 @@ def launch_setup(context, *args, **kwargs):
         executable='zed_wrapper',
         name=node_name,
         output='screen',
+        respawn=True,
         # prefix=['xterm -e valgrind --tools=callgrind'],
         # prefix=['xterm -e gdb -ex run --args'],
         #prefix=['gdbserver localhost:3000'],
