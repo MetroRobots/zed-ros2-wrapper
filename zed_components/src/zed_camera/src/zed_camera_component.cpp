@@ -7322,17 +7322,29 @@ void ZedCamera::processDetectedObjects(rclcpp::Time t)
         cam_point.point.x = data.position[0];
         cam_point.point.y = data.position[1];
         cam_point.point.z = data.position[2];
-        odom_point = mTfBuffer->transform(cam_point, pedsMsg.header.frame_id);
-
-        pedMsg.pedestrian.pose.x = odom_point.point.x;
-        pedMsg.pedestrian.pose.y = odom_point.point.y;
 
         geometry_msgs::msg::Vector3Stamped velocity_v, new_v;
         velocity_v.header = objMsg->header;
         velocity_v.vector.x = data.velocity[0];
         velocity_v.vector.y = data.velocity[1];
         velocity_v.vector.z = data.velocity[2];
-        new_v = mTfBuffer->transform(velocity_v, pedsMsg.header.frame_id);
+
+        try {
+            odom_point = mTfBuffer->transform(cam_point, pedsMsg.header.frame_id);
+            new_v = mTfBuffer->transform(velocity_v, pedsMsg.header.frame_id);
+        } catch (tf2::TransformException & ex) {
+            rclcpp::Clock steady_clock(RCL_STEADY_TIME);
+            RCLCPP_WARN_THROTTLE(
+              get_logger(), steady_clock, 1.0,
+              "The tf from '%s' to '%s' is not available.",
+              objMsg->header.frame_id.c_str(), pedsMsg.header.frame_id.c_str());
+            idx++;
+            continue;
+        }
+
+        pedMsg.pedestrian.pose.x = odom_point.point.x;
+        pedMsg.pedestrian.pose.y = odom_point.point.y;
+
 
         pedMsg.pedestrian.velocity.x = new_v.vector.x;
         pedMsg.pedestrian.velocity.y = new_v.vector.y;
