@@ -73,6 +73,7 @@ def launch_setup(context, *args, **kwargs):
     serial_number = LaunchConfiguration('serial_number')
 
     base_frame = LaunchConfiguration('base_frame')
+    root_frame = LaunchConfiguration('root_frame')
     cam_pose = LaunchConfiguration('cam_pose')
 
     publish_urdf = LaunchConfiguration('publish_urdf')
@@ -114,7 +115,7 @@ def launch_setup(context, *args, **kwargs):
                     'xacro', ' ', xacro_path, ' ',
                     'camera_name:=', camera_name_val, ' ',
                     'camera_model:=', camera_model_val, ' ',
-                    'base_frame:=', base_frame, ' ',
+                    'base_frame:=', root_frame, ' ',
                     'gnss_frame:=', gnss_frame, ' ',
                     'cam_pos_x:=', cam_pose_array[0], ' ',
                     'cam_pos_y:=', cam_pose_array[1], ' ',
@@ -216,6 +217,10 @@ def generate_launch_description():
                 description='Path to an input SVO file. Note: overrides the parameter `general.svo_file` in `common.yaml`.'),
             DeclareLaunchArgument(
                 'base_frame',
+                default_value='base_link',
+                description='Name of the base link frame.'),
+            DeclareLaunchArgument(
+                'root_frame',
                 default_value='base_link',
                 description='Name of the base link frame.'),
             DeclareLaunchArgument(
