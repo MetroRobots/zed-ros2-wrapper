@@ -1,3 +1,4 @@
+
 // Copyright 2022 Stereolabs
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -7269,7 +7270,10 @@ void ZedCamera::processDetectedObjects(rclcpp::Time t)
   pedsMsg.header.frame_id = mOdomFrameId;
 
   std::unordered_map<std::string, geometry_msgs::msg::Pose2D> peopleLocationsMap;
-  double deltaT = (t - mCachedPeopleStamp).seconds();
+static bool init = false;
+  double deltaT;
+  if(init) deltaT = (t - mCachedPeopleStamp).seconds();
+else deltaT= 0.1;
 
   size_t idx = 0;
   for (auto data : objects.object_list) {
@@ -7316,13 +7320,13 @@ void ZedCamera::processDetectedObjects(rclcpp::Time t)
 
     objMsg->objects[idx].skeleton_available = false;
 
-    if (data.label == sl::OBJECT_CLASS::PERSON && mOdom2CameraTransfValid)
+    if (data.label == sl::OBJECT_CLASS::PERSON)
     {
         social_nav_msgs::msg::PedestrianWithCovariance pedMsg;
         pedMsg.pedestrian.identifier = "Person" + std::to_string(data.id);
 
         geometry_msgs::msg::PointStamped cam_point, odom_point;
-        cam_point.header.frame_id = objMsg->header.frame_id;
+        cam_point.header = objMsg->header;
         cam_point.point.x = data.position[0];
         cam_point.point.y = data.position[1];
         cam_point.point.z = data.position[2];
@@ -7340,7 +7344,7 @@ void ZedCamera::processDetectedObjects(rclcpp::Time t)
             rclcpp::Clock steady_clock(RCL_STEADY_TIME);
             RCLCPP_WARN_THROTTLE(
               get_logger(), steady_clock, 1.0,
-              "The tf from '%s' to '%s' is not available.",
+              "XThe tf from '%s' to '%s' is not available.",
               objMsg->header.frame_id.c_str(), pedsMsg.header.frame_id.c_str());
             idx++;
             continue;
