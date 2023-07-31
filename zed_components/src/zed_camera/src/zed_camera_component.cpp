@@ -5786,6 +5786,7 @@ void ZedCamera::publishOdomTF(rclcpp::Time t)
   transformStamped.transform.rotation.y = quat.y();
   transformStamped.transform.rotation.z = quat.z();
   transformStamped.transform.rotation.w = quat.w();
+  mOdom2CameraTransfValid = true;
 
   // Publish transformation
   mTfBroadcaster->sendTransform(transformStamped);
@@ -7267,6 +7268,9 @@ void ZedCamera::processDetectedObjects(rclcpp::Time t)
   pedsMsg.header.stamp = t;
   pedsMsg.header.frame_id = mOdomFrameId;
 
+  std::unordered_map<std::string, geometry_msgs::msg::Pose2D> peopleLocationsMap;
+  double deltaT = (t - mCachedPeopleStamp).seconds();
+
   size_t idx = 0;
   for (auto data : objects.object_list) {
     objMsg->objects[idx].label = sl::toString(data.label).c_str();
@@ -7312,26 +7316,26 @@ void ZedCamera::processDetectedObjects(rclcpp::Time t)
 
     objMsg->objects[idx].skeleton_available = false;
 
-    if (data.label == sl::OBJECT_CLASS::PERSON)
+    if (data.label == sl::OBJECT_CLASS::PERSON && mOdom2CameraTransfValid)
     {
         social_nav_msgs::msg::PedestrianWithCovariance pedMsg;
         pedMsg.pedestrian.identifier = "Person" + std::to_string(data.id);
 
         geometry_msgs::msg::PointStamped cam_point, odom_point;
-        cam_point.header = objMsg->header;
+        cam_point.header.frame_id = objMsg->header.frame_id;
         cam_point.point.x = data.position[0];
         cam_point.point.y = data.position[1];
         cam_point.point.z = data.position[2];
 
-        geometry_msgs::msg::Vector3Stamped velocity_v, new_v;
+        /* geometry_msgs::msg::Vector3Stamped velocity_v, new_v;
         velocity_v.header = objMsg->header;
         velocity_v.vector.x = data.velocity[0];
         velocity_v.vector.y = data.velocity[1];
-        velocity_v.vector.z = data.velocity[2];
+        velocity_v.vector.z = data.velocity[2]; */
 
         try {
             odom_point = mTfBuffer->transform(cam_point, pedsMsg.header.frame_id);
-            new_v = mTfBuffer->transform(velocity_v, pedsMsg.header.frame_id);
+            // new_v = mTfBuffer->transform(velocity_v, pedsMsg.header.frame_id);
         } catch (tf2::TransformException & ex) {
             rclcpp::Clock steady_clock(RCL_STEADY_TIME);
             RCLCPP_WARN_THROTTLE(
@@ -7344,10 +7348,15 @@ void ZedCamera::processDetectedObjects(rclcpp::Time t)
 
         pedMsg.pedestrian.pose.x = odom_point.point.x;
         pedMsg.pedestrian.pose.y = odom_point.point.y;
+        peopleLocationsMap[pedMsg.pedestrian.identifier] = pedMsg.pedestrian.pose;
 
-
-        pedMsg.pedestrian.velocity.x = new_v.vector.x;
-        pedMsg.pedestrian.velocity.y = new_v.vector.y;
+        const auto& match = mCachedPeopleLocationsMap.find(pedMsg.pedestrian.identifier);
+        if (match != mCachedPeopleLocationsMap.end())
+        {
+            const auto& cachePose = match->second;
+            pedMsg.pedestrian.velocity.x = (pedMsg.pedestrian.pose.x - cachePose.x) / deltaT;
+            pedMsg.pedestrian.velocity.y = (pedMsg.pedestrian.pose.y - cachePose.y) / deltaT;
+        }
 
         pedMsg.covariance[0] = objMsg->objects[idx].position_covariance[0];  // xx is index 0
         pedMsg.covariance[1] = objMsg->objects[idx].position_covariance[1];  // xy is index 1.
@@ -7359,6 +7368,9 @@ void ZedCamera::processDetectedObjects(rclcpp::Time t)
     // at the end of the loop
     idx++;
   }
+
+  mCachedPeopleLocationsMap.swap(peopleLocationsMap);
+  mCachedPeopleStamp = t;
 
   //DEBUG_STREAM_OD("Publishing OBJ DET message");
   mPubObjDet->publish(std::move(objMsg));

@@ -352,6 +352,8 @@ private:
   bool mObjDetBodyFitting = false;
   sl::OBJECT_DETECTION_MODEL mObjDetModel = sl::OBJECT_DETECTION_MODEL::MULTI_CLASS_BOX_FAST;
   sl::OBJECT_FILTERING_MODE mObjFilterMode = sl::OBJECT_FILTERING_MODE::NMS3D;
+  std::unordered_map<std::string, geometry_msgs::msg::Pose2D> mCachedPeopleLocationsMap;
+  rclcpp::Time mCachedPeopleStamp;
 
   bool mBodyTrkEnabled = false;
   sl::BODY_TRACKING_MODEL mBodyTrkModel = sl::BODY_TRACKING_MODEL::HUMAN_BODY_FAST;
@@ -501,6 +503,7 @@ private:
   bool mGnss2BaseTransfValid = false;
   bool mGnss2BaseTransfFirstErr = true;
   bool mMap2UtmTransfValid = false;
+  bool mOdom2CameraTransfValid = false;
 
   std::atomic_uint16_t mAiInstanceID;
   uint16_t mObjDetInstID;
