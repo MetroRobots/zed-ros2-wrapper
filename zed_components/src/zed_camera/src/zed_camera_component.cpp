@@ -7348,6 +7348,7 @@ void ZedCamera::processDetectedObjects(rclcpp::Time t)
 
         pedMsg.pedestrian.pose.x = odom_point.point.x;
         pedMsg.pedestrian.pose.y = odom_point.point.y;
+        pedMsg.pedestrian.pose.theta = atan2(data.position[1], data.position[0]);
         peopleLocationsMap[pedMsg.pedestrian.identifier] = pedMsg.pedestrian.pose;
 
         const auto& match = mCachedPeopleLocationsMap.find(pedMsg.pedestrian.identifier);
