@@ -1617,6 +1617,8 @@ void ZedCamera::getOdParams()
 
   RCLCPP_INFO(
     get_logger(), " * Obj. Det. QoS Durability: %s", sl_tools::qos2str(qos_durability).c_str());
+
+  getParam("object_detection.publish_mask", mObjDetMaskEnable, mObjDetMaskEnable);
 }
 
 void ZedCamera::getBodyTrkParams()
@@ -7729,6 +7731,18 @@ void ZedCamera::publishPointCloud()
   // Data copy
   float * ptCloudPtr = reinterpret_cast<float *>(&pcMsg->data[0]);
   memcpy(ptCloudPtr, reinterpret_cast<float *>(cpu_cloud), ptsCount * 4 * sizeof(float));
+
+  if (mObjDetMaskEnable)
+  {
+    sensor_msgs::PointCloud2Modifier modifier(*(pcMsg.get()));
+    modifier.setPointCloud2Fields(5,
+        "x", 1, sensor_msgs::msg::PointField::FLOAT32,
+        "y", 1, sensor_msgs::msg::PointField::FLOAT32,
+        "z", 1, sensor_msgs::msg::PointField::FLOAT32,
+        "rgb", 1, sensor_msgs::msg::PointField::FLOAT32,
+        "obj_mask", 1, sensor_msgs::msg::PointField::INT32
+    );
+  }
 
   // Pointcloud publishing
   DEBUG_STREAM_PC("Publishing POINT CLOUD message");
