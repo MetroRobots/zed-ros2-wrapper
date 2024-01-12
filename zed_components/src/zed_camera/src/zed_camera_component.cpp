@@ -6971,10 +6971,32 @@ else deltaT= 0.1;
 
     if (mObjDetMaskEnable)
     {
+      std::vector<sl::uint2> object_2Dbbox = data.bounding_box_2d; 
+      unsigned int& mask_o_x = object_2Dbbox[0][0];
+      unsigned int& mask_o_y = object_2Dbbox[0][1];
       unsigned char* mask_data = data.mask.getPtr<sl::uchar1>(sl::MEM::CPU);
-      for (unsigned int mi = 0; mi < nPixels; mi++)
+      bool printed = true;
+      for (unsigned int my = 0; my < data.mask.getHeight(); my++)
       {
-          mObjDetMask[mi] |= mask_data[mi];
+        unsigned int iy = mask_o_y + my;
+        for (unsigned int mx = 0; mx < data.mask.getWidth(); mx++)
+        {
+          unsigned int ix = mask_o_x + mx;
+          unsigned int mi = my * data.mask.getWidth() + mx;
+          unsigned char& mask = mask_data[mi];
+          unsigned int ii = iy * mMatResol.width + ix;
+          mObjDetMask[ii] = mask;
+          if (!printed)
+          {
+            RCLCPP_INFO(get_logger(), "Image %zu %zu | %zu", mMatResol.width, mMatResol.height, nPixels);
+            RCLCPP_INFO(get_logger(), "Origin %u %u", mask_o_x, mask_o_y);
+            RCLCPP_INFO(get_logger(), "Mask %u %u", data.mask.getWidth(), data.mask.getHeight());
+            RCLCPP_INFO(get_logger(), "mc %d %d %d", mx, my, mi);
+            RCLCPP_INFO(get_logger(), "ic %d %d %d", ix, iy, ii);
+            RCLCPP_INFO(get_logger(), "%d", mask);
+           printed = true;
+          }
+        }
       }
     }
 
@@ -7777,8 +7799,16 @@ void ZedCamera::publishPointCloud()
     // sensor_msgs::PointCloud2ConstIterator<float> iter_y(*(pcMsg.get()), "y");
     while (iter_m != iter_m.end())
     {
-        // *iter_m = (*iter_y < 0.0) ? 0 : 1;
-        *iter_m = mObjDetMask[m_i];
+        if (m_i < height)
+    {
+      *iter_m = 0;
+    }
+    else
+    {
+      *iter_m = 1;
+    }
+        //*iter_m = (*iter_y < 0.0) ? 0 : 1;
+        //*iter_m = mObjDetMask[m_i];
         ++m_i;
         // ++iter_y;
         ++iter_m;
