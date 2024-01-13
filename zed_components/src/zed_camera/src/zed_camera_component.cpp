@@ -6971,11 +6971,11 @@ else deltaT= 0.1;
 
     if (mObjDetMaskEnable)
     {
-      std::vector<sl::uint2> object_2Dbbox = data.bounding_box_2d; 
+      std::vector<sl::uint2> object_2Dbbox = data.bounding_box_2d;
       unsigned int& mask_o_x = object_2Dbbox[0][0];
       unsigned int& mask_o_y = object_2Dbbox[0][1];
       unsigned char* mask_data = data.mask.getPtr<sl::uchar1>(sl::MEM::CPU);
-      bool printed = true;
+      // bool printed = true;
       for (unsigned int my = 0; my < data.mask.getHeight(); my++)
       {
         unsigned int iy = mask_o_y + my;
@@ -6986,7 +6986,7 @@ else deltaT= 0.1;
           unsigned char& mask = mask_data[mi];
           unsigned int ii = iy * mMatResol.width + ix;
           mObjDetMask[ii] = mask;
-          if (!printed)
+          /*if (!printed)
           {
             RCLCPP_INFO(get_logger(), "Image %zu %zu | %zu", mMatResol.width, mMatResol.height, nPixels);
             RCLCPP_INFO(get_logger(), "Origin %u %u", mask_o_x, mask_o_y);
@@ -6995,7 +6995,7 @@ else deltaT= 0.1;
             RCLCPP_INFO(get_logger(), "ic %d %d %d", ix, iy, ii);
             RCLCPP_INFO(get_logger(), "%d", mask);
            printed = true;
-          }
+       }*/
         }
       }
     }
@@ -7782,9 +7782,12 @@ void ZedCamera::publishPointCloud()
 
   // Data copy
   float * ptCloudPtr = reinterpret_cast<float *>(&pcMsg->data[0]);
-  memcpy(ptCloudPtr, reinterpret_cast<float *>(cpu_cloud), ptsCount * 4 * sizeof(float));
-
-  if (mObjDetMaskEnable)
+  unsigned int pointSize = 4 * sizeof(float);
+  if (!mObjDetMaskEnable)
+  {
+    memcpy(ptCloudPtr, reinterpret_cast<float *>(cpu_cloud), ptsCount * pointSize);
+  }
+  else
   {
     sensor_msgs::PointCloud2Modifier modifier(*(pcMsg.get()));
     modifier.setPointCloud2Fields(5,
@@ -7794,24 +7797,15 @@ void ZedCamera::publishPointCloud()
         "rgb", 1, sensor_msgs::msg::PointField::FLOAT32,
         "obj_mask", 1, sensor_msgs::msg::PointField::INT32
     );
-    sensor_msgs::PointCloud2Iterator<std::int32_t> iter_m(*(pcMsg.get()), "obj_mask");
+
+    sensor_msgs::PointCloud2Iterator<float> iter_x_out(*pcMsg, "x");
+    sensor_msgs::PointCloud2Iterator<std::int32_t> iter_m_out(*pcMsg, "obj_mask");
+
     unsigned int m_i = 0;
-    // sensor_msgs::PointCloud2ConstIterator<float> iter_y(*(pcMsg.get()), "y");
-    while (iter_m != iter_m.end())
-    {
-        if (m_i < height)
-    {
-      *iter_m = 0;
-    }
-    else
-    {
-      *iter_m = 1;
-    }
-        //*iter_m = (*iter_y < 0.0) ? 0 : 1;
-        //*iter_m = mObjDetMask[m_i];
+    for (; iter_x_out != iter_x_out.end(); ++iter_x_out, ++iter_m_out) {
+        memcpy(&(*iter_x_out), cpu_cloud + m_i * pointSize, pointSize);
+        *iter_m_out = mObjDetMask[m_i];
         ++m_i;
-        // ++iter_y;
-        ++iter_m;
     }
   }
 
