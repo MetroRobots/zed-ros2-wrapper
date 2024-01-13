@@ -7781,10 +7781,10 @@ void ZedCamera::publishPointCloud()
   sl::Vector4<float> * cpu_cloud = mMatCloud.getPtr<sl::float4>();
 
   // Data copy
-  float * ptCloudPtr = reinterpret_cast<float *>(&pcMsg->data[0]);
   unsigned int pointSize = 4 * sizeof(float);
   if (!mObjDetMaskEnable)
   {
+    float * ptCloudPtr = reinterpret_cast<float *>(&pcMsg->data[0]);
     memcpy(ptCloudPtr, reinterpret_cast<float *>(cpu_cloud), ptsCount * pointSize);
   }
   else
@@ -7803,7 +7803,7 @@ void ZedCamera::publishPointCloud()
 
     unsigned int m_i = 0;
     for (; iter_x_out != iter_x_out.end(); ++iter_x_out, ++iter_m_out) {
-        memcpy(&(*iter_x_out), cpu_cloud + m_i * pointSize, pointSize);
+        memcpy(&(*iter_x_out), cpu_cloud + m_i, pointSize);
         *iter_m_out = mObjDetMask[m_i];
         ++m_i;
     }
