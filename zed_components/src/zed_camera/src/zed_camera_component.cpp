@@ -1746,6 +1746,8 @@ void ZedCamera::getOdParams()
 
   RCLCPP_INFO(
     get_logger(), " * Obj. Det. QoS Durability: %s", sl_tools::qos2str(qos_durability).c_str());
+
+  getParam("object_detection.publish_mask", mObjDetMaskEnable, mObjDetMaskEnable);
 }
 
 void ZedCamera::getBodyTrkParams()
@@ -4453,7 +4455,7 @@ bool ZedCamera::startObjDetect()
   RCLCPP_INFO(get_logger(), "*** Starting Object Detection ***");
 
   sl::ObjectDetectionParameters od_p;
-  od_p.enable_segmentation = false;
+  od_p.enable_segmentation = true;
   od_p.enable_tracking = mObjDetTracking;
   od_p.image_sync = true;
   od_p.detection_model = mObjDetModel;
@@ -4532,6 +4534,12 @@ void ZedCamera::stopObjDetect()
     mPubObjDet->publish(std::move(objMsg));
     // <---- Send an empty message to indicate that no more objects are tracked
     // (e.g clean Rviz2)
+
+    if (mObjDetMask)
+    {
+      free(mObjDetMask);
+      mObjDetMaskSize = 0;
+    }
   }
 }
 
@@ -7207,6 +7215,21 @@ void ZedCamera::processDetectedObjects(rclcpp::Time t)
 
   sl_tools::StopWatch odElabTimer(get_clock());
 
+  unsigned int nPixels = mMatResol.width * mMatResol.height;
+
+  if (mObjDetMaskEnable)
+  {
+    if (!mObjDetMask || mObjDetMaskSize != nPixels)
+    {
+        if (mObjDetMask)
+        {
+            free(mObjDetMask);
+        }
+        mObjDetMask = new unsigned char[nPixels];
+        mObjDetMaskSize = nPixels;
+    }
+    memset(mObjDetMask, 0, nPixels * sizeof(unsigned char));
+  }
 
   sl::ObjectDetectionRuntimeParameters objectTracker_parameters_rt;
 
@@ -7319,6 +7342,37 @@ else deltaT= 0.1;
     memcpy(&(objMsg->objects[idx].head_position[0]), &(data.head_position[0]), 3 * sizeof(float));
 
     objMsg->objects[idx].skeleton_available = false;
+
+    if (mObjDetMaskEnable)
+    {
+      std::vector<sl::uint2> object_2Dbbox = data.bounding_box_2d;
+      unsigned int& mask_o_x = object_2Dbbox[0][0];
+      unsigned int& mask_o_y = object_2Dbbox[0][1];
+      unsigned char* mask_data = data.mask.getPtr<sl::uchar1>(sl::MEM::CPU);
+      // bool printed = true;
+      for (unsigned int my = 0; my < data.mask.getHeight(); my++)
+      {
+        unsigned int iy = mask_o_y + my;
+        for (unsigned int mx = 0; mx < data.mask.getWidth(); mx++)
+        {
+          unsigned int ix = mask_o_x + mx;
+          unsigned int mi = my * data.mask.getWidth() + mx;
+          unsigned char& mask = mask_data[mi];
+          unsigned int ii = iy * mMatResol.width + ix;
+          mObjDetMask[ii] = mask;
+          /*if (!printed)
+          {
+            RCLCPP_INFO(get_logger(), "Image %zu %zu | %zu", mMatResol.width, mMatResol.height, nPixels);
+            RCLCPP_INFO(get_logger(), "Origin %u %u", mask_o_x, mask_o_y);
+            RCLCPP_INFO(get_logger(), "Mask %u %u", data.mask.getWidth(), data.mask.getHeight());
+            RCLCPP_INFO(get_logger(), "mc %d %d %d", mx, my, mi);
+            RCLCPP_INFO(get_logger(), "ic %d %d %d", ix, iy, ii);
+            RCLCPP_INFO(get_logger(), "%d", mask);
+           printed = true;
+       }*/
+        }
+      }
+    }
 
     if (data.label == sl::OBJECT_CLASS::PERSON)
     {
@@ -8104,8 +8158,33 @@ void ZedCamera::publishPointCloud()
   sl::Vector4<float> * cpu_cloud = mMatCloud.getPtr<sl::float4>();
 
   // Data copy
-  float * ptCloudPtr = reinterpret_cast<float *>(&pcMsg->data[0]);
-  memcpy(ptCloudPtr, reinterpret_cast<float *>(cpu_cloud), ptsCount * 4 * sizeof(float));
+  unsigned int pointSize = 4 * sizeof(float);
+  if (!mObjDetMaskEnable)
+  {
+    float * ptCloudPtr = reinterpret_cast<float *>(&pcMsg->data[0]);
+    memcpy(ptCloudPtr, reinterpret_cast<float *>(cpu_cloud), ptsCount * pointSize);
+  }
+  else
+  {
+    sensor_msgs::PointCloud2Modifier modifier(*(pcMsg.get()));
+    modifier.setPointCloud2Fields(5,
+        "x", 1, sensor_msgs::msg::PointField::FLOAT32,
+        "y", 1, sensor_msgs::msg::PointField::FLOAT32,
+        "z", 1, sensor_msgs::msg::PointField::FLOAT32,
+        "rgb", 1, sensor_msgs::msg::PointField::FLOAT32,
+        "obj_mask", 1, sensor_msgs::msg::PointField::INT32
+    );
+
+    sensor_msgs::PointCloud2Iterator<float> iter_x_out(*pcMsg, "x");
+    sensor_msgs::PointCloud2Iterator<std::int32_t> iter_m_out(*pcMsg, "obj_mask");
+
+    unsigned int m_i = 0;
+    for (; iter_x_out != iter_x_out.end(); ++iter_x_out, ++iter_m_out) {
+        memcpy(&(*iter_x_out), cpu_cloud + m_i, pointSize);
+        *iter_m_out = mObjDetMask[m_i];
+        ++m_i;
+    }
+  }
 
   // Pointcloud publishing
   DEBUG_STREAM_PC("Publishing POINT CLOUD message");

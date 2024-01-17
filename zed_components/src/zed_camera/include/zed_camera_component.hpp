@@ -354,6 +354,9 @@ private:
   sl::OBJECT_FILTERING_MODE mObjFilterMode = sl::OBJECT_FILTERING_MODE::NMS3D;
   std::unordered_map<std::string, geometry_msgs::msg::Pose2D> mCachedPeopleLocationsMap;
   rclcpp::Time mCachedPeopleStamp;
+  bool mObjDetMaskEnable = true;
+  unsigned char* mObjDetMask = nullptr;
+  unsigned int mObjDetMaskSize = 0;
 
   bool mBodyTrkEnabled = false;
   sl::BODY_TRACKING_MODEL mBodyTrkModel = sl::BODY_TRACKING_MODEL::HUMAN_BODY_FAST;
