@@ -1619,12 +1619,6 @@ void ZedCamera::getOdParams()
     get_logger(), " * Obj. Det. QoS Durability: %s", sl_tools::qos2str(qos_durability).c_str());
 
   getParam("object_detection.publish_clean_cloud", mCleanCloudEnable, mCleanCloudEnable);
-  if (mCleanCloudEnable)
-  {
-      std::string pointcloud_topic = mTopicRoot + "point_cloud/clean_cloud";
-    mPubCleanCloud = create_publisher<sensor_msgs::msg::PointCloud2>(pointcloud_topic, mDepthQos);
-    RCLCPP_INFO_STREAM(get_logger(), "Advertised on topic: " << mPubCleanCloud->get_topic_name());
-  }
 }
 
 void ZedCamera::getBodyTrkParams()
@@ -4323,6 +4317,13 @@ bool ZedCamera::startObjDetect()
     RCLCPP_INFO_STREAM(get_logger(), "Advertised on topic " << mPubObjDetPed->get_topic_name());
   }
 
+  if (mCleanCloudEnable && !mPubCleanCloud)
+  {
+    std::string pointcloud_topic = mTopicRoot + "point_cloud/clean_cloud";
+    mPubCleanCloud = create_publisher<sensor_msgs::msg::PointCloud2>(pointcloud_topic, mDepthQos);
+    RCLCPP_INFO_STREAM(get_logger(), "Advertised on topic: " << mPubCleanCloud->get_topic_name());
+  }
+
   mObjDetRunning = true;
   return true;
 }
@@ -7015,6 +7016,8 @@ else deltaT= 0.1;
   mPubObjDet->publish(std::move(objMsg));
 
   mPubObjDetPed->publish(pedsMsg);
+
+  publishCleanPointCloud(objects);
 
   // ----> Diagnostic information update
   mObjDetElabMean_sec->addValue(odElabTimer.toc());
