@@ -538,6 +538,9 @@ private:
   pointcloudPub mPubCleanCloud;
   bool mCleanCloudEnable = true;
   pointcloudMsgPtr mCleanCloud = nullptr;
+  double mCleanMinZ = 0.15;
+  double mCleanMaxZ = 1.2;
+  std::string mCleanFrame = "odom";
   void publishCleanPointCloud(const sl::Objects& objects);
   // <---- Publishers
 

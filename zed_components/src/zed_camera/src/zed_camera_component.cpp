@@ -38,6 +38,8 @@
 #error Unsupported ROS2 distro
 #endif
 
+#include <tf2_sensor_msgs/tf2_sensor_msgs.h>
+
 #include <sl/Camera.hpp>
 
 #include "sl_tools.hpp"
@@ -1619,6 +1621,9 @@ void ZedCamera::getOdParams()
     get_logger(), " * Obj. Det. QoS Durability: %s", sl_tools::qos2str(qos_durability).c_str());
 
   getParam("object_detection.publish_clean_cloud", mCleanCloudEnable, mCleanCloudEnable);
+  getParam("object_detection.clean_min_z", mCleanMinZ, mCleanMinZ);
+  getParam("object_detection.clean_max_z", mCleanMaxZ, mCleanMaxZ);
+  getParam("object_detection.clean_frame", mCleanFrame, mCleanFrame);
 }
 
 void ZedCamera::getBodyTrkParams()
@@ -7032,8 +7037,9 @@ inline bool withinObject(float x, float y, float z, const sl::ObjectData& object
     sl::float3& min_p = object_3Dbbox[0];
     sl::float3& max_p = object_3Dbbox[6];
     return x >= min_p[0] && x <= max_p[0] &&
-           y >= min_p[1] && y <= max_p[1] &&
-           z >= min_p[2] && z <= max_p[2];
+           y >= min_p[1] && y <= max_p[1]
+           /* Ignore Z coordinate && z >= min_p[2] && z <= max_p[2]*/
+           ;
 }
 
 inline bool withinObjects(float x, float y, float z, const sl::Objects& objects)
@@ -7043,7 +7049,6 @@ inline bool withinObjects(float x, float y, float z, const sl::Objects& objects)
         {
             return true;
         }
-
     }
     return false;
 }
@@ -7103,14 +7108,22 @@ void ZedCamera::publishCleanPointCloud(const sl::Objects& objects)
   sensor_msgs::PointCloud2ConstIterator<float> iter_z(*mCleanCloud, "z");
 
   for (; iter_x != iter_x.end(); ++iter_x, ++iter_y, ++iter_z) {
-      if (withinObjects(*iter_x, *iter_y, *iter_z, objects))
+      if (*iter_z < mCleanMinZ || *iter_z > mCleanMaxZ || withinObjects(*iter_x, *iter_y, *iter_z, objects))
       {
           *iter_x = NAN;
       }
     }
 
-  // Pointcloud publishing
-  DEBUG_STREAM_PC("Publishing POINT CLOUD message");
+    if (mCleanFrame != mCleanCloud->header.frame_id) {
+    try {
+      static auto cloud = std::make_unique<sensor_msgs::msg::PointCloud2>();
+      mTfBuffer->transform(*mCleanCloud, *cloud, mCleanFrame, tf2::durationFromSec(0.05));
+      mPubCleanCloud->publish(*cloud);
+      return;
+    } catch (tf2::TransformException & ex) {
+      RCLCPP_ERROR_STREAM(this->get_logger(), "Clean Cloud Transform failure: " << ex.what());
+    }
+  }
   mPubCleanCloud->publish(*mCleanCloud);
 }
 
