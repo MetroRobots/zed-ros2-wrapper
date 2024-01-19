@@ -1623,7 +1623,7 @@ void ZedCamera::getOdParams()
   {
       std::string pointcloud_topic = mTopicRoot + "point_cloud/clean_cloud";
     mPubCleanCloud = create_publisher<sensor_msgs::msg::PointCloud2>(pointcloud_topic, mDepthQos);
-    RCLCPP_INFO_STREAM(get_logger(), "Advertised on topic: " << mPubCloud->get_topic_name());
+    RCLCPP_INFO_STREAM(get_logger(), "Advertised on topic: " << mPubCleanCloud->get_topic_name());
   }
 }
 
