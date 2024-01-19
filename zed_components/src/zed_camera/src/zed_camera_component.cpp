@@ -1617,6 +1617,14 @@ void ZedCamera::getOdParams()
 
   RCLCPP_INFO(
     get_logger(), " * Obj. Det. QoS Durability: %s", sl_tools::qos2str(qos_durability).c_str());
+
+  getParam("object_detection.publish_clean_cloud", mCleanCloudEnable, mCleanCloudEnable);
+  if (mCleanCloudEnable)
+  {
+      std::string pointcloud_topic = mTopicRoot + "point_cloud/clean_cloud";
+    mPubCleanCloud = create_publisher<sensor_msgs::msg::PointCloud2>(pointcloud_topic, mDepthQos);
+    RCLCPP_INFO_STREAM(get_logger(), "Advertised on topic: " << mPubCloud->get_topic_name());
+  }
 }
 
 void ZedCamera::getBodyTrkParams()
@@ -7013,6 +7021,94 @@ else deltaT= 0.1;
   mObjDetPeriodMean_sec->addValue(odFreqTimer.toc());
   odFreqTimer.tic();
   // <---- Diagnostic information update
+}
+
+inline bool withinObject(float x, float y, float z, const sl::ObjectData& object)
+{
+    std::vector<sl::float3> object_3Dbbox = object.bounding_box;
+    sl::float3& min_p = object_3Dbbox[0];
+    sl::float3& max_p = object_3Dbbox[6];
+    return x >= min_p[0] && x <= max_p[0] &&
+           y >= min_p[1] && y <= max_p[1] &&
+           z >= min_p[2] && z <= max_p[2];
+}
+
+inline bool withinObjects(float x, float y, float z, const sl::Objects& objects)
+{
+    for (auto object : objects.object_list) {
+        if (withinObject(x, y, z, object))
+        {
+            return true;
+        }
+
+    }
+    return false;
+}
+
+void ZedCamera::publishCleanPointCloud(const sl::Objects& objects)
+{
+  if (!mCleanCloudEnable || count_subscribers(mPubCleanCloud->get_topic_name()) == 0)
+  {
+    return;
+  }
+
+  if (!mCleanCloud)
+  {
+    mCleanCloud = std::make_unique<sensor_msgs::msg::PointCloud2>();
+  }
+
+  // Initialize Point Cloud message
+  // https://github.com/ros/common_msgs/blob/jade-devel/sensor_msgs/include/sensor_msgs/point_cloud2_iterator.h
+
+  int width = mMatResol.width;
+  int height = mMatResol.height;
+
+  int ptsCount = width * height;
+
+  if (mSvoMode || mSimEnabled) {
+    // mCleanCloud->header.stamp = sl_tools::slTime2Ros(mZed.getTimestamp(sl::TIME_REFERENCE::CURRENT));
+    mCleanCloud->header.stamp = mFrameTimestamp;
+  } else {
+    mCleanCloud->header.stamp = sl_tools::slTime2Ros(mMatCloud.timestamp);
+  }
+
+  if (mCleanCloud->width != width || mCleanCloud->height != height) {
+    mCleanCloud->header.frame_id = mPointCloudFrameId;  // Set the header values of the ROS message
+
+    mCleanCloud->is_bigendian = false;
+    mCleanCloud->is_dense = false;
+
+    mCleanCloud->width = width;
+    mCleanCloud->height = height;
+
+    sensor_msgs::PointCloud2Modifier modifier(*mCleanCloud);
+    modifier.setPointCloud2Fields(
+      4, "x", 1, sensor_msgs::msg::PointField::FLOAT32, "y", 1,
+      sensor_msgs::msg::PointField::FLOAT32, "z", 1, sensor_msgs::msg::PointField::FLOAT32, "rgb",
+      1, sensor_msgs::msg::PointField::FLOAT32);
+  }
+
+  sl::Vector4<float> * cpu_cloud = mMatCloud.getPtr<sl::float4>();
+
+  // Data copy
+  float * ptCloudPtr = reinterpret_cast<float *>(&mCleanCloud->data[0]);
+  memcpy(ptCloudPtr, reinterpret_cast<float *>(cpu_cloud), ptsCount * 4 * sizeof(float));
+
+  // Remove points
+  sensor_msgs::PointCloud2Iterator<float> iter_x(*mCleanCloud, "x");
+  sensor_msgs::PointCloud2ConstIterator<float> iter_y(*mCleanCloud, "y");
+  sensor_msgs::PointCloud2ConstIterator<float> iter_z(*mCleanCloud, "z");
+
+  for (; iter_x != iter_x.end(); ++iter_x, ++iter_y, ++iter_z) {
+      if (withinObjects(*iter_x, *iter_y, *iter_z, objects))
+      {
+          *iter_x = NAN;
+      }
+    }
+
+  // Pointcloud publishing
+  DEBUG_STREAM_PC("Publishing POINT CLOUD message");
+  mPubCleanCloud->publish(*mCleanCloud);
 }
 
 void ZedCamera::processBodies(rclcpp::Time t)

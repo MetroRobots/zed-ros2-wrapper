@@ -534,6 +534,11 @@ private:
 
   geoPosePub mPubGeoPose;
   poseStatusPub mPubGeoPoseStatus;
+
+  pointcloudPub mPubCleanCloud;
+  bool mCleanCloudEnable = true;
+  pointcloudMsgPtr mCleanCloud = nullptr;
+  void publishCleanPointCloud(const sl::Objects& objects);
   // <---- Publishers
 
   // <---- Publisher variables
