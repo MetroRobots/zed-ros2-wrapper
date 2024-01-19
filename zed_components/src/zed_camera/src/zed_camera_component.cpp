@@ -7028,12 +7028,10 @@ else deltaT= 0.1;
 
 inline bool withinObject(float x, float y, float z, const sl::ObjectData& object)
 {
-    std::vector<sl::float3> object_3Dbbox = object.bounding_box;
-    sl::float3& min_p = object_3Dbbox[0];
-    sl::float3& max_p = object_3Dbbox[6];
-    return x >= min_p[0] && x <= max_p[0] &&
-           y >= min_p[1] && y <= max_p[1] &&
-           z >= min_p[2] && z <= max_p[2];
+    std::vector<sl::float3> box = object.bounding_box;
+    return x >= box[4][0] && x <= box[5][0] &&
+           y >= box[6][1] && y <= box[0][1] &&
+           z >= box[5][2] && z <= box[3][2];
 }
 
 inline bool withinObjects(float x, float y, float z, const sl::Objects& objects)
