@@ -1621,9 +1621,16 @@ void ZedCamera::getOdParams()
     get_logger(), " * Obj. Det. QoS Durability: %s", sl_tools::qos2str(qos_durability).c_str());
 
   getParam("object_detection.publish_clean_cloud", mCleanCloudEnable, mCleanCloudEnable);
+  getParam("object_detection.flatten_clean_cloud", mFlattenCleanCloud, mFlattenCleanCloud);
   getParam("object_detection.clean_min_z", mCleanMinZ, mCleanMinZ);
   getParam("object_detection.clean_max_z", mCleanMaxZ, mCleanMaxZ);
   getParam("object_detection.clean_frame", mCleanFrame, mCleanFrame);
+  getParam("object_detection.clean_angular_range", mCleanAngularRange, mCleanAngularRange);
+  getParam("object_detection.clean_angular_increment", mCleanAngularIncrement, mCleanAngularIncrement);
+
+  uint32_t ranges_size = std::ceil(mCleanAngularRange / mCleanAngularIncrement);
+  mCleanRanges.resize(ranges_size);
+  mCleanPoints.resize(ranges_size);
 }
 
 void ZedCamera::getBodyTrkParams()
@@ -7022,7 +7029,14 @@ else deltaT= 0.1;
 
   mPubObjDetPed->publish(pedsMsg);
 
-  publishCleanPointCloud(objects);
+  if (mFlattenCleanCloud)
+  {
+    publishFlatPointCloud(objects);
+  }
+  else
+  {
+    publishCleanPointCloud(objects);
+  }
 
   // ----> Diagnostic information update
   mObjDetElabMean_sec->addValue(odElabTimer.toc());
@@ -7111,6 +7125,101 @@ void ZedCamera::publishCleanPointCloud(const sl::Objects& objects)
           *iter_x = NAN;
       }
     }
+
+    if (mCleanFrame != mCleanCloud->header.frame_id) {
+    try {
+      static auto cloud = std::make_unique<sensor_msgs::msg::PointCloud2>();
+      mTfBuffer->transform(*mCleanCloud, *cloud, mCleanFrame, tf2::durationFromSec(0.05));
+      mPubCleanCloud->publish(*cloud);
+      return;
+    } catch (tf2::TransformException & ex) {
+      RCLCPP_ERROR_STREAM(this->get_logger(), "Clean Cloud Transform failure: " << ex.what());
+    }
+  }
+  mPubCleanCloud->publish(*mCleanCloud);
+}
+
+void ZedCamera::publishFlatPointCloud(const sl::Objects& objects)
+{
+  if (!mCleanCloudEnable || count_subscribers(mPubCleanCloud->get_topic_name()) == 0)
+  {
+    return;
+  }
+
+  if (!mCleanCloud)
+  {
+    mCleanCloud = std::make_unique<sensor_msgs::msg::PointCloud2>();
+  }
+
+  mCleanRanges.assign(mCleanRanges.size(), std::numeric_limits<double>::infinity());
+
+  sl::Vector4<float> * cpu_cloud = mMatCloud.getPtr<sl::float4>();
+  int ptsCount = mMatResol.width * mMatResol.height;
+  for (unsigned int i = 0; i < ptsCount; i++)
+  {
+    const sl::Vector4<float>& pt = cpu_cloud[i];
+
+    // CHECK FOR NAN?
+    if (pt.z < mCleanMinZ || pt.z > mCleanMaxZ || withinObjects(pt.x, pt.y, pt.z, objects))
+    {
+        continue;
+    }
+
+    float rangeSq = pt.x * pt.x + pt.y * pt.y;
+    double angle = atan2(pt.y, pt.x);
+    if (std::abs(angle) > mCleanAngularRange / 2) {
+      continue;
+    }
+
+    // overwrite range at laserscan ray if new range is smaller
+    int index = (angle - mCleanAngularRange / 2) / mCleanAngularIncrement;
+    if (rangeSq < mCleanRanges[index]) {
+      mCleanRanges[index] = rangeSq;
+      mCleanPoints[index] = std::make_pair(pt.x, pt.y);
+    }
+  }
+
+  if (mSvoMode || mSimEnabled) {
+    // mCleanCloud->header.stamp = sl_tools::slTime2Ros(mZed.getTimestamp(sl::TIME_REFERENCE::CURRENT));
+    mCleanCloud->header.stamp = mFrameTimestamp;
+  } else {
+    mCleanCloud->header.stamp = sl_tools::slTime2Ros(mMatCloud.timestamp);
+  }
+
+  if (mCleanCloud->width != ptsCount || mCleanCloud->height != 1) {
+    mCleanCloud->header.frame_id = mPointCloudFrameId;  // Set the header values of the ROS message
+
+    mCleanCloud->is_bigendian = false;
+    mCleanCloud->is_dense = false;
+
+    mCleanCloud->width = ptsCount;
+    mCleanCloud->height = 1;
+
+    sensor_msgs::PointCloud2Modifier modifier(*mCleanCloud);
+    modifier.setPointCloud2Fields(
+      3, "x", 1, sensor_msgs::msg::PointField::FLOAT32, "y", 1,
+      sensor_msgs::msg::PointField::FLOAT32, "z", 1, sensor_msgs::msg::PointField::FLOAT32);
+  }
+
+
+  // Data Transfer
+  sensor_msgs::PointCloud2Iterator<float> iter_x(*mCleanCloud, "x");
+  sensor_msgs::PointCloud2Iterator<float> iter_y(*mCleanCloud, "y");
+  sensor_msgs::PointCloud2Iterator<float> iter_z(*mCleanCloud, "z");
+
+  for (unsigned int i = 0; i < ptsCount; i++, ++iter_x, ++iter_y, ++iter_z)
+  {
+    if (std::isfinite(mCleanRanges[i]))
+    {
+      *iter_x = NAN;
+    }
+    else
+    {
+        *iter_x = mCleanPoints[i].first;
+        *iter_y = mCleanPoints[i].second;
+        *iter_z = 0.0;
+    }
+  }
 
     if (mCleanFrame != mCleanCloud->header.frame_id) {
     try {
