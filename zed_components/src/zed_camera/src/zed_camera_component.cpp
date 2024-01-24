@@ -7159,7 +7159,10 @@ void ZedCamera::publishFlatPointCloud(const sl::Objects& objects)
   {
     const sl::Vector4<float>& pt = cpu_cloud[i];
 
-    // CHECK FOR NAN?
+    if (isnan(pt.x) || isnan(pt.y) || isnan(pt.z))
+    {
+      continue;
+    }
     if (pt.z < mCleanMinZ || pt.z > mCleanMaxZ || withinObjects(pt.x, pt.y, pt.z, objects))
     {
         continue;
@@ -7172,7 +7175,7 @@ void ZedCamera::publishFlatPointCloud(const sl::Objects& objects)
     }
 
     // overwrite range at laserscan ray if new range is smaller
-    int index = (angle - mCleanAngularRange / 2) / mCleanAngularIncrement;
+    int index = (angle + mCleanAngularRange / 2) / mCleanAngularIncrement;
     if (rangeSq < mCleanRanges[index]) {
       mCleanRanges[index] = rangeSq;
       mCleanPoints[index] = std::make_pair(pt.x, pt.y);
@@ -7186,13 +7189,13 @@ void ZedCamera::publishFlatPointCloud(const sl::Objects& objects)
     mCleanCloud->header.stamp = sl_tools::slTime2Ros(mMatCloud.timestamp);
   }
 
-  if (mCleanCloud->width != ptsCount || mCleanCloud->height != 1) {
+  if (mCleanCloud->width != mCleanRanges.size() || mCleanCloud->height != 1) {
     mCleanCloud->header.frame_id = mPointCloudFrameId;  // Set the header values of the ROS message
 
     mCleanCloud->is_bigendian = false;
     mCleanCloud->is_dense = false;
 
-    mCleanCloud->width = ptsCount;
+    mCleanCloud->width = mCleanRanges.size();
     mCleanCloud->height = 1;
 
     sensor_msgs::PointCloud2Modifier modifier(*mCleanCloud);
@@ -7207,9 +7210,9 @@ void ZedCamera::publishFlatPointCloud(const sl::Objects& objects)
   sensor_msgs::PointCloud2Iterator<float> iter_y(*mCleanCloud, "y");
   sensor_msgs::PointCloud2Iterator<float> iter_z(*mCleanCloud, "z");
 
-  for (unsigned int i = 0; i < ptsCount; i++, ++iter_x, ++iter_y, ++iter_z)
+  for (unsigned int i = 0; i < mCleanRanges.size(); i++, ++iter_x, ++iter_y, ++iter_z)
   {
-    if (std::isfinite(mCleanRanges[i]))
+    if (!std::isfinite(mCleanRanges[i]))
     {
       *iter_x = NAN;
     }
