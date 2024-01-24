@@ -7166,10 +7166,10 @@ void ZedCamera::publishFlatPointCloud(const sl::Objects& objects)
       sl::float3& front_left = box.at(4);
       sl::float3& front_right = box.at(7);
       objectDepths[oi] = (front_left[0] * front_left[0] + front_left[1] * front_left[1]);
-      float minAngle = atan2(front_left[1], front_left[0]) - angleFudge;
-      float maxAngle = atan2(front_right[1], front_right[0]) + angleFudge;
+      float minAngle = atan2(front_right[1], front_right[0]) - angleFudge;
+      float maxAngle = atan2(front_left[1], front_left[0]) + angleFudge;
       objectAngleIndices[oi] = std::make_pair(getLaserIndex(minAngle), getLaserIndex(maxAngle));
-      RCLCPP_INFO(get_logger(), "%d: %.2f (%.f, %.2f)", oi, objectDepths[oi], minAngle, maxAngle);
+      // RCLCPP_INFO(get_logger(), "%d: %.2f (%.2f, %.2f) (%.2f, %.2f) %.2f %.2f", oi, objectDepths[oi], front_left[0] ,front_left[1],front_right[0], front_right[1],  minAngle, maxAngle);
       oi++;
   }
 
@@ -7212,8 +7212,9 @@ void ZedCamera::publishFlatPointCloud(const sl::Objects& objects)
       if (shouldFilter)
       {
         // mCleanPoints[index] = std::make_pair(NAN, NAN);
-        mCleanPoints[index] = std::make_pair(cos(angle) * objectDepths[oi],
-                                             sin(angle) * objectDepths[oi]);
+        float range = sqrt(objectDepths[oi]);
+        mCleanPoints[index] = std::make_pair(cos(angle) * range,
+                                             sin(angle) * range);
       }
       else
       {
