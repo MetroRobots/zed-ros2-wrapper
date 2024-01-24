@@ -549,6 +549,10 @@ private:
   std::string mCleanFrame = "odom";
   void publishCleanPointCloud(const sl::Objects& objects);
   void publishFlatPointCloud(const sl::Objects& objects);
+  inline int getLaserIndex(double angle) const
+  {
+      return (angle + mCleanAngularRange / 2) / mCleanAngularIncrement;
+  }
   // <---- Publishers
 
   // <---- Publisher variables

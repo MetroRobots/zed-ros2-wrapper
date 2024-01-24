@@ -7152,6 +7152,25 @@ void ZedCamera::publishFlatPointCloud(const sl::Objects& objects)
     mCleanCloud = std::make_unique<sensor_msgs::msg::PointCloud2>();
   }
 
+  std::vector<float> objectDepths(objects.object_list.size());
+  std::vector<std::pair<int, int>> objectAngleIndices(objectDepths.size());
+
+  unsigned int oi = 0;
+  float angleFudge = 0.1;
+  getParam("object_detection.angle_margin", angleFudge, angleFudge);
+
+  for (auto object : objects.object_list) {
+      std::vector<sl::float3>& box = object.bounding_box;
+      sl::float3& front_left = box.at(4);
+      sl::float3& front_right = box.at(7);
+      objectDepths[oi] = (front_left[0] * front_left[0] + front_left[1] * front_left[1]);
+      float minAngle = atan2(front_left[1], front_left[0]) - angleFudge;
+      float maxAngle = atan2(front_right[1], front_right[0]) + angleFudge;
+      objectAngleIndices[oi] = std::make_pair(getLaserIndex(minAngle), getLaserIndex(maxAngle));
+      RCLCPP_INFO(get_logger(), "%d: %.2f (%.f, %.2f)", oi, objectDepths[oi], minAngle, maxAngle);
+      oi++;
+  }
+
   mCleanRanges.assign(mCleanRanges.size(), std::numeric_limits<double>::infinity());
 
   sl::Vector4<float> * cpu_cloud = mMatCloud.getPtr<sl::float4>();
@@ -7176,12 +7195,23 @@ void ZedCamera::publishFlatPointCloud(const sl::Objects& objects)
     }
 
     // overwrite range at laserscan ray if new range is smaller
-    int index = (angle + mCleanAngularRange / 2) / mCleanAngularIncrement;
+    int index = getLaserIndex(angle);
     if (rangeSq < mCleanRanges[index]) {
       mCleanRanges[index] = rangeSq;
-      if (withinObjects(pt.x, pt.y, pt.z, objects))
+      bool shouldFilter = false;
+      for (oi = 0; oi < objectDepths.size(); oi++)
       {
-          mCleanPoints[index] = std::make_pair(NAN, NAN);
+        if (objectAngleIndices[oi].first <= index && index <= objectAngleIndices[oi].second)
+        {
+            shouldFilter = true;
+            break;
+        }
+      }
+      if (shouldFilter)
+      {
+        // mCleanPoints[index] = std::make_pair(NAN, NAN);
+        mCleanPoints[index] = std::make_pair(cos(angle) * objectDepths[oi],
+                                             sin(angle) * objectDepths[oi]);
       }
       else
       {
