@@ -7164,7 +7164,7 @@ void ZedCamera::publishFlatPointCloud(const sl::Objects& objects)
     {
       continue;
     }
-    if (pt.z < mCleanMinZ || pt.z > mCleanMaxZ || withinObjects(pt.x, pt.y, pt.z, objects))
+    if (pt.z < mCleanMinZ || pt.z > mCleanMaxZ)
     {
         continue;
     }
@@ -7179,7 +7179,14 @@ void ZedCamera::publishFlatPointCloud(const sl::Objects& objects)
     int index = (angle + mCleanAngularRange / 2) / mCleanAngularIncrement;
     if (rangeSq < mCleanRanges[index]) {
       mCleanRanges[index] = rangeSq;
-      mCleanPoints[index] = std::make_pair(pt.x, pt.y);
+      if (withinObjects(pt.x, pt.y, pt.z, objects))
+      {
+          mCleanPoints[index] = std::make_pair(NAN, NAN);
+      }
+      else
+      {
+        mCleanPoints[index] = std::make_pair(pt.x, pt.y);
+      }
     }
   }
 
