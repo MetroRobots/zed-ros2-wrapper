@@ -1630,6 +1630,7 @@ void ZedCamera::getOdParams()
   getParam("object_detection.flat_output_z", mFlatOutputZ, mFlatOutputZ);
 
   declare_parameter("object_detection.angle_margin", 0.1);
+  declare_parameter("object_detection.depth_margin", 0.1);
 
   uint32_t ranges_size = std::ceil(mCleanAngularRange / mCleanAngularIncrement);
   mCleanRanges.resize(ranges_size);
@@ -7158,8 +7159,9 @@ void ZedCamera::publishFlatPointCloud(const sl::Objects& objects)
   std::vector<std::pair<int, int>> objectAngleIndices(objectDepths.size());
 
   unsigned int oi = 0;
-  float angleFudge;
+  float angleFudge, distanceFudge;
   get_parameter("object_detection.angle_margin", angleFudge);
+  get_parameter("object_detection.depth_margin", distanceFudge);
 
   for (auto object : objects.object_list) {
       std::vector<sl::float3>& box = object.bounding_box;
@@ -7198,28 +7200,29 @@ void ZedCamera::publishFlatPointCloud(const sl::Objects& objects)
 
     // overwrite range at laserscan ray if new range is smaller
     int index = getLaserIndex(angle);
-    if (rangeSq < mCleanRanges[index]) {
-      mCleanRanges[index] = rangeSq;
-      bool shouldFilter = false;
-      for (oi = 0; oi < objectDepths.size(); oi++)
+    int containObjectIndex = -1;
+    for (oi = 0; oi < objectDepths.size(); oi++)
+    {
+      if (objectAngleIndices[oi].first <= index && index <= objectAngleIndices[oi].second)
       {
-        if (objectAngleIndices[oi].first <= index && index <= objectAngleIndices[oi].second)
-        {
-            shouldFilter = true;
-            break;
-        }
+          containObjectIndex = oi;
+          break;
       }
-      if (shouldFilter)
-      {
-        // mCleanPoints[index] = std::make_pair(NAN, NAN);
-        float range = sqrt(objectDepths[oi]);
+    }
+
+    if (containObjectIndex < 0 || rangeSq < objectDepths[containObjectIndex] - distanceFudge)
+    {
+        if (rangeSq < mCleanRanges[index]) {
+            mCleanRanges[index] = rangeSq;
+            mCleanPoints[index] = std::make_pair(pt.x, pt.y);
+        }
+    }
+    else
+    {
+        mCleanRanges[index] = objectDepths[containObjectIndex];
+        float range = sqrt(objectDepths[containObjectIndex]) - distanceFudge;
         mCleanPoints[index] = std::make_pair(cos(angle) * range,
                                              sin(angle) * range);
-      }
-      else
-      {
-        mCleanPoints[index] = std::make_pair(pt.x, pt.y);
-      }
     }
   }
 
