@@ -1629,6 +1629,8 @@ void ZedCamera::getOdParams()
   getParam("object_detection.clean_angular_increment", mCleanAngularIncrement, mCleanAngularIncrement);
   getParam("object_detection.flat_output_z", mFlatOutputZ, mFlatOutputZ);
 
+  declare_parameter("object_detection.angle_margin", 0.1);
+
   uint32_t ranges_size = std::ceil(mCleanAngularRange / mCleanAngularIncrement);
   mCleanRanges.resize(ranges_size);
   mCleanPoints.resize(ranges_size);
@@ -7156,8 +7158,8 @@ void ZedCamera::publishFlatPointCloud(const sl::Objects& objects)
   std::vector<std::pair<int, int>> objectAngleIndices(objectDepths.size());
 
   unsigned int oi = 0;
-  float angleFudge = 0.1;
-  getParam("object_detection.angle_margin", angleFudge, angleFudge);
+  float angleFudge;
+  get_parameter("object_detection.angle_margin", angleFudge);
 
   for (auto object : objects.object_list) {
       std::vector<sl::float3>& box = object.bounding_box;
