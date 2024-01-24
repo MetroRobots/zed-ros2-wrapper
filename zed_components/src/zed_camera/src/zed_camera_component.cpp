@@ -7220,9 +7220,10 @@ void ZedCamera::publishFlatPointCloud(const sl::Objects& objects)
     else
     {
         mCleanRanges[index] = objectDepths[containObjectIndex];
-        float range = sqrt(objectDepths[containObjectIndex]) - distanceFudge;
-        mCleanPoints[index] = std::make_pair(cos(angle) * range,
-                                             sin(angle) * range);
+        //float range = sqrt(objectDepths[containObjectIndex]) - distanceFudge;
+        //mCleanPoints[index] = std::make_pair(cos(angle) * range,
+        //                                     sin(angle) * range);
+        mCleanPoints[index] = std::make_pair(NAN, NAN);
     }
   }
 
