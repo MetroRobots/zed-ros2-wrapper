@@ -1627,6 +1627,7 @@ void ZedCamera::getOdParams()
   getParam("object_detection.clean_frame", mCleanFrame, mCleanFrame);
   getParam("object_detection.clean_angular_range", mCleanAngularRange, mCleanAngularRange);
   getParam("object_detection.clean_angular_increment", mCleanAngularIncrement, mCleanAngularIncrement);
+  getParam("object_detection.flat_output_z", mFlatOutputZ, mFlatOutputZ);
 
   uint32_t ranges_size = std::ceil(mCleanAngularRange / mCleanAngularIncrement);
   mCleanRanges.resize(ranges_size);
@@ -7220,7 +7221,7 @@ void ZedCamera::publishFlatPointCloud(const sl::Objects& objects)
     {
         *iter_x = mCleanPoints[i].first;
         *iter_y = mCleanPoints[i].second;
-        *iter_z = 0.0;
+        *iter_z = mFlatOutputZ;
     }
   }
 

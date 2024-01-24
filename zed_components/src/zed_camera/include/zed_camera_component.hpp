@@ -543,6 +543,7 @@ private:
   double mCleanMaxZ = 1.2;
   double mCleanAngularRange = 1.68;
   double mCleanAngularIncrement = M_PI / 180;
+  double mFlatOutputZ = 0.0;
   std::vector<float> mCleanRanges;
   std::vector<std::pair<float, float>> mCleanPoints;
   std::string mCleanFrame = "odom";
