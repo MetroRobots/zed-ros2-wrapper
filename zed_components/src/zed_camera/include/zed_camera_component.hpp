@@ -682,7 +682,6 @@ private:
   // ----> Timestamps
   rclcpp::Time mFrameTimestamp;
   rclcpp::Time mGnssTimestamp;
-  rclcpp::Time mPrevTimestamp;
   // <---- Timestamps
 
   // ----> SVO Recording parameters

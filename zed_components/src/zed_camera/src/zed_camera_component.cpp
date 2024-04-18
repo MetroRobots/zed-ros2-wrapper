@@ -5003,7 +5003,6 @@ void ZedCamera::threadFunc_zedGrab()
       }
 
       // ----> Timestamp
-      mPrevTimestamp = mFrameTimestamp;
       if (mSvoMode) {
         mFrameTimestamp = sl_tools::slTime2Ros(mZed.getTimestamp(sl::TIME_REFERENCE::CURRENT));
       } else if (mSimEnabled) {
