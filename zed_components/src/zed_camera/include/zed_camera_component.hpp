@@ -20,6 +20,7 @@
 
 #include "sl_tools.hpp"
 #include "sl_types.hpp"
+#include "ped_tracker.hpp"
 #include "visibility_control.hpp"
 
 namespace stereolabs
