@@ -43,7 +43,6 @@
 #include <sensor_msgs/msg/temperature.hpp>
 #include <sensor_msgs/msg/nav_sat_fix.hpp>
 #include <sensor_msgs/msg/nav_sat_status.hpp>
-#include <social_nav_msgs/msg/pedestrians.hpp>
 #include <social_nav_msgs/msg/pedestrians_with_covariance.hpp>
 #include <geographic_msgs/msg/geo_pose_stamped.hpp>
 #include <std_srvs/srv/set_bool.hpp>
@@ -104,7 +103,6 @@ typedef std::shared_ptr<rclcpp::Publisher<visualization_msgs::msg::Marker>> mark
 
 typedef std::shared_ptr<rclcpp::Publisher<geographic_msgs::msg::GeoPoseStamped>> geoPosePub;
 
-typedef std::shared_ptr<rclcpp::Publisher<social_nav_msgs::msg::Pedestrians>> pedPub;
 typedef std::shared_ptr<rclcpp::Publisher<social_nav_msgs::msg::PedestriansWithCovariance>> varPedPub;
 
 typedef std::shared_ptr<rclcpp::Subscription<geometry_msgs::msg::PointStamped>> clickedPtSub;

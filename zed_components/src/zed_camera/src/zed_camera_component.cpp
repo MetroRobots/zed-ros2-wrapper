@@ -1,4 +1,3 @@
-
 // Copyright 2022 Stereolabs
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -77,8 +76,6 @@ ZedCamera::ZedCamera(const rclcpp::NodeOptions & options)
   mObjDetQos(1),
   mObjDetPedQos(1),
   mBodyTrkQos(1),
-  mPedestrianQos(1),
-  mPedestrianWithCovarQos(1),
   mClickedPtQos(1),
   mGnssFixQos(1)
 {
@@ -3003,8 +3000,6 @@ void ZedCamera::initPublishers()
 
   std::string body_trk_topic_root = "body_trk";
   mBodyTrkTopic = mTopicRoot + body_trk_topic_root + "/skeletons";
-  mPedestrianTopic = mTopicRoot + body_trk_topic_root + "/pedestrians";
-  mPedestrianWithCovarTopic = mTopicRoot + body_trk_topic_root + "/pedestrians_with_covariance";
 
   std::string confImgRoot = "confidence";
   std::string conf_map_topic_name = "confidence_map";
@@ -4405,14 +4400,6 @@ bool ZedCamera::startBodyTracking()
   if (!mPubBodyTrk) {
     mPubBodyTrk = create_publisher<zed_interfaces::msg::ObjectsStamped>(mBodyTrkTopic, mBodyTrkQos);
     RCLCPP_INFO_STREAM(get_logger(), "Advertised on topic " << mPubBodyTrk->get_topic_name());
-  }
-  if (!mPubPedestrian) {
-    mPubPedestrian = create_publisher<social_nav_msgs::msg::Pedestrians>(mPedestrianTopic, mPedestrianQos);
-    RCLCPP_INFO_STREAM(get_logger(), "Advertised on topic " << mPubPedestrian->get_topic_name());
-  }
-  if (!mPubPedestrianWithCovar) {
-    mPubPedestrianWithCovar = create_publisher<social_nav_msgs::msg::PedestriansWithCovariance>(mPedestrianWithCovarTopic, mPedestrianWithCovarQos);
-    RCLCPP_INFO_STREAM(get_logger(), "Advertised on topic " << mPubPedestrianWithCovar->get_topic_name());
   }
 
   DEBUG_BT("Body Tracking publisher created");
@@ -7028,29 +7015,25 @@ void ZedCamera::processBodies(rclcpp::Time t)
 {
   //DEBUG_BT("processBodies");
 
-  size_t bt_sub_count = 0, ped_sub_count = 0, ped_with_covar_sub_count = 0;
+  size_t bt_sub_count = 0;
 
   try {
     bt_sub_count = count_subscribers(mPubBodyTrk->get_topic_name());
-    ped_sub_count = count_subscribers(mPubPedestrian->get_topic_name());
-    ped_with_covar_sub_count = count_subscribers(mPubPedestrianWithCovar->get_topic_name());
   } catch (...) {
     rcutils_reset_error();
     DEBUG_STREAM_OD("processBodies: Exception while counting subscribers");
     return;
   }
 
-  mBodyTrkSubscribed = bt_sub_count > 0;
-  mPedestrianSubscribed = ped_sub_count > 0;
-  mPedestrianWithCovarSubscribed = ped_with_covar_sub_count > 0;
-
-  if (!mBodyTrkSubscribed && !mPedestrianSubscribed && !mPedestrianWithCovarSubscribed)
-  {
+  if (bt_sub_count < 1) {
+    mBodyTrkSubscribed = false;
     return;
   }
 
   sl_tools::StopWatch btElabTimer(get_clock());
   static sl_tools::StopWatch btFreqTimer(get_clock());
+
+  mBodyTrkSubscribed = true;
 
   // ----> Process realtime dynamic parameters
   sl::BodyTrackingRuntimeParameters bt_params_rt;
@@ -7082,17 +7065,6 @@ void ZedCamera::processBodies(rclcpp::Time t)
   bodyMsg->header.frame_id = mLeftCamFrameId;
 
   bodyMsg->objects.resize(bodyCount);
-
-  social_nav_msgs::msg::Pedestrians pedsMsg;
-  pedsMsg.header.stamp = t;
-  pedsMsg.header.frame_id = mOdomFrameId;
-  pedsMsg.pedestrians.resize(bodyCount);
-  double deltaT = (mFrameTimestamp - mPrevTimestamp).seconds();
-  std::unordered_map<std::string, double> currentYaw;
-
-  social_nav_msgs::msg::PedestriansWithCovariance pedsWithCovarMsg;
-  pedsWithCovarMsg.header = pedsMsg.header;
-  pedsWithCovarMsg.pedestrians.resize(bodyCount);
 
   size_t idx = 0;
   for (auto body : bodies.body_list) {
@@ -7162,52 +7134,12 @@ void ZedCamera::processBodies(rclcpp::Time t)
         3 * kp_size * sizeof(float));
     }
 
-    social_nav_msgs::msg::Pedestrian& pedMsg = pedsMsg.pedestrians[idx];
-    pedMsg.identifier = label;
-
-    tf2::Transform body_pose;
-    body_pose.setOrigin(
-      tf2::Vector3(body.position[0], body.position[1], body.position[0])
-    );
-    body_pose.setRotation(
-      tf2::Quaternion(body.global_root_orientation[0],
-                      body.global_root_orientation[1],
-                      body.global_root_orientation[2],
-                      body.global_root_orientation[3]));
-
-    /*tf2::Transform bodyInOdom = body_pose * mCamera2OdomTransf;
-    tf2::Vector3 translation = bodyInOdom.getOrigin();
-
-    pedMsg.pose.x = translation.x();
-    pedMsg.pose.y = translation.y();
-    tf2::Matrix3x3 tfMat(bodyInOdom.getRotation());
-    double tempRoll, tempPitch;
-    tfMat.getRPY(tempRoll, tempPitch, pedMsg.pose.theta);
-
-    tf2::Vector3 velocityV = tf2::Vector3(body.velocity[0], body.velocity[1], body.velocity[2]);
-    tf2::Vector3 vinodom =  mCamera2OdomTransf * velocityV;
-
-    pedMsg.velocity.x = vinodom.x();
-    pedMsg.velocity.y = vinodom.y();*/
-
-    currentYaw[label] = pedMsg.pose.theta;
-    if (mBodyTrkPrevYaw.count(label))
-    {
-      pedMsg.velocity.theta = (pedMsg.pose.theta - mBodyTrkPrevYaw[label]) / deltaT;
-    }
-
-    social_nav_msgs::msg::PedestrianWithCovariance& pedWithCovarMsg = pedsWithCovarMsg.pedestrians[idx];
-    pedWithCovarMsg.pedestrian = pedMsg;
-    pedWithCovarMsg.covariance[0] = bodyMsg->objects[idx].position_covariance[0];  // xx is index 0
-    pedWithCovarMsg.covariance[1] = bodyMsg->objects[idx].position_covariance[1];  // xy is index 1.
-    // xz is index 2, skipping.
-    pedWithCovarMsg.covariance[2] = bodyMsg->objects[idx].position_covariance[1];  // yx is the same as xy.
-    pedWithCovarMsg.covariance[3] = bodyMsg->objects[idx].position_covariance[3];  // yy is index 3
 
     // ----------------------------------
     // at the end of the loop
 
     // TODO(Walter) Add support for
+    //body.global_root_orientation;
     //body.local_orientation_per_joint;
     //body.local_orientation_per_joint;
 
@@ -7216,13 +7148,6 @@ void ZedCamera::processBodies(rclcpp::Time t)
 
   DEBUG_STREAM_OD("Publishing BODY TRK message");
   mPubBodyTrk->publish(std::move(bodyMsg));
-
-  DEBUG_STREAM_OD("Publishing PEDESTRIAN message");
-  mPubPedestrian->publish(pedsMsg);
-  mBodyTrkPrevYaw.swap(currentYaw);
-
-  DEBUG_STREAM_OD("Publishing PEDESTRIAN WITH COVARIANCE message");
-  mPubPedestrianWithCovar->publish(pedsWithCovarMsg);
 
   // ----> Diagnostic information update
   mBodyTrkElabMean_sec->addValue(btElabTimer.toc());

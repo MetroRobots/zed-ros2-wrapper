@@ -235,8 +235,6 @@ private:
   std::string mObjectDetTopic;
   std::string mObjectDetPedTopic;
   std::string mBodyTrkTopic;
-  std::string mPedestrianTopic;
-  std::string mPedestrianWithCovarTopic;
   std::string mOdomPathTopic;
   std::string mMapPathTopic;
   std::string mClickedPtTopic;  // Clicked point
@@ -348,7 +346,6 @@ private:
   double mBodyTrkPredTimeout = 0.5;
   double mBodyTrkConfThresh = 50.0;
   int mBodyTrkMinKp = 10;
-  std::unordered_map<std::string, double> mBodyTrkPrevYaw;
 
   // TODO(Walter) remove QoS parameters, use instead the new ROS2 Humble QoS settings engine
 
@@ -362,8 +359,6 @@ private:
   rclcpp::QoS mObjDetQos;
   rclcpp::QoS mObjDetPedQos;
   rclcpp::QoS mBodyTrkQos;
-  rclcpp::QoS mPedestrianQos;
-  rclcpp::QoS mPedestrianWithCovarQos;
   rclcpp::QoS mClickedPtQos;
   rclcpp::QoS mGnssFixQos;
   // <---- Parameter variables
@@ -526,8 +521,6 @@ private:
   objPub mPubObjDet;
   varPedPub mPubObjDetPed;
   objPub mPubBodyTrk;
-  pedPub mPubPedestrian;
-  varPedPub mPubPedestrianWithCovar;
   depthInfoPub mPubDepthInfo;
   planePub mPubPlane;
   markerPub mPubMarker;
@@ -682,8 +675,6 @@ private:
   bool mObjDetSubscribed = false;
   bool mObjDetPedSubscribed = false;
   bool mBodyTrkSubscribed = false;
-  bool mPedestrianSubscribed = false;
-  bool mPedestrianWithCovarSubscribed = false;
 
   diagnostic_updater::Updater mDiagUpdater;  // Diagnostic Updater
 
