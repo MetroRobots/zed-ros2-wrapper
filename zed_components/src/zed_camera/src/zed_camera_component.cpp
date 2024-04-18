@@ -6987,7 +6987,15 @@ else deltaT= 0.1;
             const auto& cachePose = match->second;
             pedMsg.pedestrian.velocity.x = (pedMsg.pedestrian.pose.x - cachePose.x) / deltaT;
             pedMsg.pedestrian.velocity.y = (pedMsg.pedestrian.pose.y - cachePose.y) / deltaT;
+            pedMsg.pedestrian.velocity.theta = (pedMsg.pedestrian.pose.theta - cachePose.theta) / deltaT;
         }
+        else
+        {
+          pedMsg.pedestrian.velocity.x = 0.0;
+          pedMsg.pedestrian.velocity.y = 0.0;
+          pedMsg.pedestrian.velocity.theta = 0.0;
+        }
+
 
         pedMsg.covariance[0] = objMsg->objects[idx].position_covariance[0];  // xx is index 0
         pedMsg.covariance[1] = objMsg->objects[idx].position_covariance[1];  // xy is index 1.
@@ -7002,6 +7010,7 @@ else deltaT= 0.1;
 
   mCachedPeopleLocationsMap.swap(peopleLocationsMap);
   mCachedPeopleStamp = t;
+  init = true;
 
   //DEBUG_STREAM_OD("Publishing OBJ DET message");
   mPubObjDet->publish(std::move(objMsg));
