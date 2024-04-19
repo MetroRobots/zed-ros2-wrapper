@@ -92,14 +92,18 @@ social_nav_msgs::msg::PedestriansWithCovariance PedTracker::getMsg()
   pedsMsg.header.stamp = cached_stamp_;
   pedsMsg.header.frame_id = target_frame_;
 
-  for (const auto& pair : ped_map_)
+  for (auto it = ped_map_.begin(); it != ped_map_.end();)
   {
-    social_nav_msgs::msg::PedestrianWithCovariance pedMsg;
-    auto& track = pair.second;
+    auto& track = it->second;
     if (track.isCurrent(cached_stamp_))
+    {
       pedsMsg.pedestrians.push_back(track.getMsg());
-
-    // TODO: Remove no longer current
+      ++it;
+    }
+    else
+    {
+      it = ped_map_.erase(it);
+    }
   }
 
   return pedsMsg;
