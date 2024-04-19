@@ -57,7 +57,6 @@ void PedTracker::update(const sl::Objects& objects, const rclcpp::Time& t)
     deltaT = 0.1;
   }
 
-  std::unordered_map<std::string, social_nav_msgs::msg::PedestrianWithCovariance> peopleLocationsMap;
   size_t idx = 0;
   for (auto data : objects.object_list)
   {
@@ -67,70 +66,24 @@ void PedTracker::update(const sl::Objects& objects, const rclcpp::Time& t)
       continue;
     }
 
-    std::string ident = "Person" + std::to_string(data.id);
+    auto track = ped_map_.find(data.id);
+    if (track == ped_map_.end())
+    {
+      ped_map_.insert(std::make_pair(data.id, TrackedPed(*this, data.id)));
+    }
 
-    geometry_msgs::msg::PointStamped cam_point, odom_point;
+    geometry_msgs::msg::PointStamped cam_point;
     cam_point.header.stamp = t;
     cam_point.header.frame_id = source_frame_;
     cam_point.point.x = data.position[0];
     cam_point.point.y = data.position[1];
     cam_point.point.z = data.position[2];
 
-    /* geometry_msgs::msg::Vector3Stamped velocity_v, new_v;
-velocity_v.header = objMsg->header;
-velocity_v.vector.x = data.velocity[0];
-velocity_v.vector.y = data.velocity[1];
-velocity_v.vector.z = data.velocity[2]; */
-
-    try
-    {
-      odom_point = tf_buffer_.transform(cam_point, target_frame_);
-      // new_v = tf_buffer_.transform(velocity_v, target_frame_);
-    }
-    catch (tf2::TransformException& ex)
-    {
-      rclcpp::Clock steady_clock(RCL_STEADY_TIME);
-      RCLCPP_WARN_THROTTLE(logger_, steady_clock, 1.0, "The tf from '%s' to '%s' is not available.",
-                           source_frame_.c_str(), target_frame_.c_str());
-      idx++;
-      continue;
-    }
-
-    social_nav_msgs::msg::PedestrianWithCovariance pedMsg;
-    geometry_msgs::msg::Pose2D pose;
-    pedMsg.pedestrian.pose.x = odom_point.point.x;
-    pedMsg.pedestrian.pose.y = odom_point.point.y;
-    pedMsg.pedestrian.pose.theta = atan2(data.position[1], data.position[0]);
-
-    const auto& match = ped_map_.find(pedMsg.pedestrian.identifier);
-    if (match != ped_map_.end())
-    {
-      const auto& cachePose = match->second.pedestrian.pose;
-      pedMsg.pedestrian.velocity.x = (pedMsg.pedestrian.pose.x - cachePose.x) / deltaT;
-      pedMsg.pedestrian.velocity.y = (pedMsg.pedestrian.pose.y - cachePose.y) / deltaT;
-      pedMsg.pedestrian.velocity.theta = (pedMsg.pedestrian.pose.theta - cachePose.theta) / deltaT;
-    }
-    else
-    {
-      pedMsg.pedestrian.velocity.x = 0.0;
-      pedMsg.pedestrian.velocity.y = 0.0;
-      pedMsg.pedestrian.velocity.theta = 0.0;
-    }
-
-    pedMsg.covariance[0] = data.position_covariance[0];  // xx is index 0
-    pedMsg.covariance[1] = data.position_covariance[1];  // xy is index 1.
-    // xz is index 2, skipping.
-    pedMsg.covariance[2] = data.position_covariance[1];  // yx is the same as xy.
-    pedMsg.covariance[3] = data.position_covariance[3];  // yy is index 3
-
-    peopleLocationsMap[ident] = pedMsg;
-
+    track->second.update(cam_point);
     idx++;
   }
 
-  ped_map_.swap(peopleLocationsMap);
   cached_stamp_ = t;
-  time_initialized_ = true;
 }
 
 social_nav_msgs::msg::PedestriansWithCovariance PedTracker::getMsg()
@@ -142,11 +95,81 @@ social_nav_msgs::msg::PedestriansWithCovariance PedTracker::getMsg()
   for (const auto& pair : ped_map_)
   {
     social_nav_msgs::msg::PedestrianWithCovariance pedMsg;
-    pedMsg.pedestrian.identifier = pair.first;
-    pedsMsg.pedestrians.push_back(pedMsg);
+    auto& track = pair.second;
+    if (track.isCurrent(cached_stamp_))
+      pedsMsg.pedestrians.push_back(track.getMsg());
+
+    // TODO: Remove no longer current
   }
 
   return pedsMsg;
+}
+
+PedTracker::TrackedPed::TrackedPed(PedTracker& parent, int label_id) : parent_(parent)
+{
+  label_ = "Person" + std::to_string(label_id);
+}
+
+void PedTracker::TrackedPed::update(const geometry_msgs::msg::PointStamped& point)
+{
+  geometry_msgs::msg::PointStamped target_point;
+  try
+  {
+    target_point = parent_.tf_buffer_.transform(point, parent_.target_frame_);
+  }
+  catch (tf2::TransformException& ex)
+  {
+    rclcpp::Clock steady_clock(RCL_STEADY_TIME);
+    RCLCPP_WARN_THROTTLE(parent_.logger_, steady_clock, 1.0, "The tf from '%s' to '%s' is not available.",
+                         point.header.frame_id.c_str(), parent_.target_frame_.c_str());
+    return;
+  }
+  points_.push(target_point);
+
+  while (points_.size() > 2)
+  {
+    points_.pop();
+  }
+}
+
+nav_2d_msgs::msg::Twist2D PedTracker::TrackedPed::getVelocity() const
+{
+  nav_2d_msgs::msg::Twist2D twist;
+  if (points_.size() == 1)
+  {
+    return twist;
+  }
+
+  const auto& cachePoint0 = points_.front();
+  const auto& cachePoint1 = points_.back();
+  double t0 = cachePoint0.header.stamp.sec + cachePoint0.header.stamp.nanosec / 1e9;
+  double t1 = cachePoint1.header.stamp.sec + cachePoint1.header.stamp.nanosec / 1e9;
+  double deltaT = t1 - t0;
+  twist.x = (cachePoint1.point.x - cachePoint0.point.x) / deltaT;
+  twist.y = (cachePoint1.point.y - cachePoint0.point.y) / deltaT;
+  // twist.theta = (cachePoint1.point.theta - cachePoint0.point.theta) / deltaT;
+
+  return twist;
+}
+
+social_nav_msgs::msg::PedestrianWithCovariance PedTracker::TrackedPed::getMsg() const
+{
+  social_nav_msgs::msg::PedestrianWithCovariance pedMsg;
+  pedMsg.pedestrian.identifier = label_;
+  pedMsg.pedestrian.pose.x = points_.back().point.x;
+  pedMsg.pedestrian.pose.y = points_.back().point.y;
+  // pedMsg.pedestrian.pose.theta = atan2(data.position[1], data.position[0]);
+
+  pedMsg.pedestrian.velocity = getVelocity();
+
+  /*
+    pedMsg.covariance[0] = data.position_covariance[0];  // xx is index 0
+    pedMsg.covariance[1] = data.position_covariance[1];  // xy is index 1.
+    // xz is index 2, skipping.
+    pedMsg.covariance[2] = data.position_covariance[1];  // yx is the same as xy.
+    pedMsg.covariance[3] = data.position_covariance[3];  // yy is index 3*/
+
+  return pedMsg;
 }
 
 }  // namespace stereolabs

@@ -37,6 +37,7 @@
 #pragma once
 #include "sl_tools.hpp"
 #include "sl_types.hpp"
+#include <queue>
 
 namespace stereolabs
 {
@@ -52,11 +53,32 @@ public:
 protected:
   const tf2_ros::Buffer& tf_buffer_;
   rclcpp::Logger logger_;
-  std::unordered_map<std::string, social_nav_msgs::msg::PedestrianWithCovariance> ped_map_;
   rclcpp::Time cached_stamp_;
   bool time_initialized_{false};
 
   // Params
   std::string source_frame_, target_frame_;
+
+  class TrackedPed
+  {
+  public:
+    TrackedPed(PedTracker& parent, int label_id);
+    void update(const geometry_msgs::msg::PointStamped& point);
+    social_nav_msgs::msg::PedestrianWithCovariance getMsg() const;
+
+    nav_2d_msgs::msg::Twist2D getVelocity() const;
+
+    bool isCurrent(const rclcpp::Time& t) const
+    {
+      return points_.size() > 0 && points_.back().header.stamp == t;
+    }
+
+  protected:
+    PedTracker& parent_;
+    std::string label_;
+    std::queue<geometry_msgs::msg::PointStamped> points_;
+  };
+
+  std::unordered_map<int, TrackedPed> ped_map_;
 };
 }  // namespace stereolabs
