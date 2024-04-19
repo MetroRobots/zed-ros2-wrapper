@@ -62,6 +62,14 @@ PedTracker::PedTracker(rclcpp::Node& node, const tf2_ros::Buffer& tf_buffer, con
 {
   node.declare_parameter("pos_tracking.pedestrian_frame", "odom");
   node.get_parameter("pos_tracking.pedestrian_frame", target_frame_);
+
+  node.declare_parameter("pos_tracking.kalman.p", 0.01);
+  node.declare_parameter("pos_tracking.kalman.q", 0.01);
+  node.declare_parameter("pos_tracking.kalman.r", 1.0);
+
+  node.get_parameter("pos_tracking.kalman.p", kalman_p_);
+  node.get_parameter("pos_tracking.kalman.q", kalman_q_);
+  node.get_parameter("pos_tracking.kalman.r", kalman_r_);
 }
 
 void PedTracker::update(const sl::Objects& objects, const rclcpp::Time& t)
@@ -103,6 +111,7 @@ void PedTracker::update(const sl::Objects& objects, const rclcpp::Time& t)
   }
 
   cached_stamp_ = t;
+  time_initialized_ = true;
 }
 
 social_nav_msgs::msg::PedestriansWithCovariance PedTracker::getMsg()
@@ -149,8 +158,26 @@ void PedTracker::TrackedPed::update(const geometry_msgs::msg::PointStamped& poin
   }
 
   TrackPoint latest = TrackPoint(target_point);
-  if (!points_.empty())
+  if (points_.empty())
+  {
+    x_.push_back(0.0);
+    x_.push_back(0.0);
+    p_.push_back(parent_.kalman_p_);
+    p_.push_back(parent_.kalman_p_);
+  }
+  else
+  {
     latest.combine(points_.back());
+    std::vector<double> values = {latest.vm(), latest.vtheta()};
+    for (unsigned int i = 0; i < values.size(); i++)
+    {
+      p_[i] += parent_.kalman_q_;
+      double k = p_[i] / (p_[i] + parent_.kalman_r_);
+      x_[i] += k * (values[i] - x_[i]);
+      p_[i] = (1 - k) * p_[i];
+    }
+  }
+
   points_.push(latest);
 
   while (points_.size() > 2)
@@ -167,9 +194,11 @@ nav_2d_msgs::msg::Twist2D PedTracker::TrackedPed::getVelocity() const
     return twist;
   }
 
-  const auto& cachePoint1 = points_.back();
-  twist.x = cachePoint1.vx();
-  twist.y = cachePoint1.vy();
+  double vm = x_[0];
+  double theta = x_[1];
+
+  twist.x = vm * cos(theta);
+  twist.y = vm * sin(theta);
   // twist.theta = (cachePoint1.point.theta - cachePoint0.point.theta) / deltaT;
 
   return twist;

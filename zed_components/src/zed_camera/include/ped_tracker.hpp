@@ -79,6 +79,15 @@ public:
     else
       return 0.0;
   }
+  double vm() const
+  {
+    return vm_;
+  }
+
+  double vtheta() const
+  {
+    return vtheta_;
+  }
 
   void combine(const TrackPoint& prev);
 
@@ -107,6 +116,7 @@ protected:
 
   // Params
   std::string source_frame_, target_frame_;
+  double kalman_p_, kalman_q_, kalman_r_;
 
   class TrackedPed
   {
@@ -126,6 +136,7 @@ protected:
     PedTracker& parent_;
     std::string label_;
     std::queue<TrackPoint> points_;
+    std::vector<double> p_, x_;
   };
 
   std::unordered_map<int, TrackedPed> ped_map_;
