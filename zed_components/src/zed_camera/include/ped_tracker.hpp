@@ -41,6 +41,33 @@
 
 namespace stereolabs
 {
+class TrackPoint
+{
+public:
+  TrackPoint(const geometry_msgs::msg::PointStamped& pt);
+  const rclcpp::Time& getStamp() const
+  {
+    return time_;
+  }
+  double getTime() const
+  {
+    return t_;
+  }
+  double x() const
+  {
+    return point_.point.x;
+  }
+  double y() const
+  {
+    return point_.point.y;
+  }
+
+protected:
+  geometry_msgs::msg::PointStamped point_;
+  rclcpp::Time time_;
+  double t_;
+};
+
 class PedTracker
 {
 public:
@@ -70,13 +97,13 @@ protected:
 
     bool isCurrent(const rclcpp::Time& t) const
     {
-      return points_.size() > 0 && points_.back().header.stamp == t;
+      return points_.size() > 0 && points_.back().getStamp() == t;
     }
 
   protected:
     PedTracker& parent_;
     std::string label_;
-    std::queue<geometry_msgs::msg::PointStamped> points_;
+    std::queue<TrackPoint> points_;
   };
 
   std::unordered_map<int, TrackedPed> ped_map_;

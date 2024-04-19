@@ -38,6 +38,12 @@
 
 namespace stereolabs
 {
+TrackPoint::TrackPoint(const geometry_msgs::msg::PointStamped& pt) : point_(pt)
+{
+  time_ = pt.header.stamp;
+  t_ = pt.header.stamp.sec + pt.header.stamp.nanosec / 1e9;
+}
+
 PedTracker::PedTracker(rclcpp::Node& node, const tf2_ros::Buffer& tf_buffer, const std::string& source_frame)
   : tf_buffer_(tf_buffer), logger_(node.get_logger().get_child("ped_tracker")), source_frame_(source_frame)
 {
@@ -128,7 +134,7 @@ void PedTracker::TrackedPed::update(const geometry_msgs::msg::PointStamped& poin
                          point.header.frame_id.c_str(), parent_.target_frame_.c_str());
     return;
   }
-  points_.push(target_point);
+  points_.push(TrackPoint(target_point));
 
   while (points_.size() > 2)
   {
@@ -146,11 +152,9 @@ nav_2d_msgs::msg::Twist2D PedTracker::TrackedPed::getVelocity() const
 
   const auto& cachePoint0 = points_.front();
   const auto& cachePoint1 = points_.back();
-  double t0 = cachePoint0.header.stamp.sec + cachePoint0.header.stamp.nanosec / 1e9;
-  double t1 = cachePoint1.header.stamp.sec + cachePoint1.header.stamp.nanosec / 1e9;
-  double deltaT = t1 - t0;
-  twist.x = (cachePoint1.point.x - cachePoint0.point.x) / deltaT;
-  twist.y = (cachePoint1.point.y - cachePoint0.point.y) / deltaT;
+  double deltaT = cachePoint1.getTime() - cachePoint0.getTime();
+  twist.x = (cachePoint1.x() - cachePoint0.x()) / deltaT;
+  twist.y = (cachePoint1.y() - cachePoint0.y()) / deltaT;
   // twist.theta = (cachePoint1.point.theta - cachePoint0.point.theta) / deltaT;
 
   return twist;
@@ -160,8 +164,8 @@ social_nav_msgs::msg::PedestrianWithCovariance PedTracker::TrackedPed::getMsg() 
 {
   social_nav_msgs::msg::PedestrianWithCovariance pedMsg;
   pedMsg.pedestrian.identifier = label_;
-  pedMsg.pedestrian.pose.x = points_.back().point.x;
-  pedMsg.pedestrian.pose.y = points_.back().point.y;
+  pedMsg.pedestrian.pose.x = points_.back().x();
+  pedMsg.pedestrian.pose.y = points_.back().y();
   // pedMsg.pedestrian.pose.theta = atan2(data.position[1], data.position[0]);
 
   pedMsg.pedestrian.velocity = getVelocity();
