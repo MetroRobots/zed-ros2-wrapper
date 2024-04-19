@@ -61,11 +61,33 @@ public:
   {
     return point_.point.y;
   }
+  double vx() const
+  {
+    if (vm_)
+    {
+      return vm_ * cos(vtheta_);
+    }
+    else
+      return 0.0;
+  }
+  double vy() const
+  {
+    if (vm_)
+    {
+      return vm_ * sin(vtheta_);
+    }
+    else
+      return 0.0;
+  }
+
+  void combine(const TrackPoint& prev);
 
 protected:
   geometry_msgs::msg::PointStamped point_;
   rclcpp::Time time_;
   double t_;
+  double dx_, dy_, dt_;
+  double vm_, vtheta_;
 };
 
 class PedTracker

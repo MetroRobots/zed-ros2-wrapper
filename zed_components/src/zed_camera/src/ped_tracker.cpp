@@ -38,10 +38,23 @@
 
 namespace stereolabs
 {
-TrackPoint::TrackPoint(const geometry_msgs::msg::PointStamped& pt) : point_(pt)
+TrackPoint::TrackPoint(const geometry_msgs::msg::PointStamped& pt)
+  : point_(pt), dx_(0.0), dy_(0.0), dt_(0.0), vm_(0.0), vtheta_(0.0)
 {
   time_ = pt.header.stamp;
   t_ = pt.header.stamp.sec + pt.header.stamp.nanosec / 1e9;
+}
+
+void TrackPoint::combine(const TrackPoint& prev)
+{
+  dx_ = point_.point.x - prev.point_.point.x;
+  dy_ = point_.point.y - prev.point_.point.y;
+  dt_ = t_ - prev.t_;
+
+  double vx = dx_ / dt_;
+  double vy = dy_ / dt_;
+  vm_ = hypot(vx, vy);
+  vtheta_ = atan2(vy, vx);
 }
 
 PedTracker::PedTracker(rclcpp::Node& node, const tf2_ros::Buffer& tf_buffer, const std::string& source_frame)
@@ -134,7 +147,11 @@ void PedTracker::TrackedPed::update(const geometry_msgs::msg::PointStamped& poin
                          point.header.frame_id.c_str(), parent_.target_frame_.c_str());
     return;
   }
-  points_.push(TrackPoint(target_point));
+
+  TrackPoint latest = TrackPoint(target_point);
+  if (!points_.empty())
+    latest.combine(points_.back());
+  points_.push(latest);
 
   while (points_.size() > 2)
   {
@@ -150,11 +167,9 @@ nav_2d_msgs::msg::Twist2D PedTracker::TrackedPed::getVelocity() const
     return twist;
   }
 
-  const auto& cachePoint0 = points_.front();
   const auto& cachePoint1 = points_.back();
-  double deltaT = cachePoint1.getTime() - cachePoint0.getTime();
-  twist.x = (cachePoint1.x() - cachePoint0.x()) / deltaT;
-  twist.y = (cachePoint1.y() - cachePoint0.y()) / deltaT;
+  twist.x = cachePoint1.vx();
+  twist.y = cachePoint1.vy();
   // twist.theta = (cachePoint1.point.theta - cachePoint0.point.theta) / deltaT;
 
   return twist;
