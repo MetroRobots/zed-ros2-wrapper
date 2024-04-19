@@ -35,10 +35,28 @@
 /* Author: David V. Lu!! */
 
 #pragma once
+#include "sl_tools.hpp"
+#include "sl_types.hpp"
 
-namespace zed_components
+namespace stereolabs
 {
 class PedTracker
 {
+public:
+  PedTracker(rclcpp::Node& node, const tf2_ros::Buffer& tf_buffer, const std::string& source_frame);
+
+  void update(const sl::Objects& objects, const rclcpp::Time& t);
+
+  social_nav_msgs::msg::PedestriansWithCovariance getMsg();
+
+protected:
+  const tf2_ros::Buffer& tf_buffer_;
+  rclcpp::Logger logger_;
+  std::unordered_map<std::string, social_nav_msgs::msg::PedestrianWithCovariance> ped_map_;
+  rclcpp::Time cached_stamp_;
+  bool time_initialized_{false};
+
+  // Params
+  std::string source_frame_, target_frame_;
 };
-}  // namespace zed_components
+}  // namespace stereolabs

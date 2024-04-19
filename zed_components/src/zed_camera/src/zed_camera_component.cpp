@@ -4310,6 +4310,10 @@ bool ZedCamera::startObjDetect()
     RCLCPP_INFO_STREAM(get_logger(), "Advertised on topic " << mPubObjDetPed->get_topic_name());
   }
 
+  if (!mPedTracker) {
+    mPedTracker = std::make_shared<PedTracker>(*this, *mTfBuffer, mLeftCamFrameId);
+  }
+
   mObjDetRunning = true;
   return true;
 }
@@ -6877,16 +6881,6 @@ void ZedCamera::processDetectedObjects(rclcpp::Time t)
 
   objMsg->objects.resize(objCount);
 
-  social_nav_msgs::msg::PedestriansWithCovariance pedsMsg;
-  pedsMsg.header.stamp = t;
-  pedsMsg.header.frame_id = mOdomFrameId;
-
-  std::unordered_map<std::string, geometry_msgs::msg::Pose2D> peopleLocationsMap;
-static bool init = false;
-  double deltaT;
-  if(init) deltaT = (t - mCachedPeopleStamp).seconds();
-else deltaT= 0.1;
-
   size_t idx = 0;
   for (auto data : objects.object_list) {
     objMsg->objects[idx].label = sl::toString(data.label).c_str();
@@ -6931,77 +6925,15 @@ else deltaT= 0.1;
     memcpy(&(objMsg->objects[idx].head_position[0]), &(data.head_position[0]), 3 * sizeof(float));
 
     objMsg->objects[idx].skeleton_available = false;
-
-    if (data.label == sl::OBJECT_CLASS::PERSON)
-    {
-        social_nav_msgs::msg::PedestrianWithCovariance pedMsg;
-        pedMsg.pedestrian.identifier = "Person" + std::to_string(data.id);
-
-        geometry_msgs::msg::PointStamped cam_point, odom_point;
-        cam_point.header = objMsg->header;
-        cam_point.point.x = data.position[0];
-        cam_point.point.y = data.position[1];
-        cam_point.point.z = data.position[2];
-
-        /* geometry_msgs::msg::Vector3Stamped velocity_v, new_v;
-        velocity_v.header = objMsg->header;
-        velocity_v.vector.x = data.velocity[0];
-        velocity_v.vector.y = data.velocity[1];
-        velocity_v.vector.z = data.velocity[2]; */
-
-        try {
-            odom_point = mTfBuffer->transform(cam_point, pedsMsg.header.frame_id);
-            // new_v = mTfBuffer->transform(velocity_v, pedsMsg.header.frame_id);
-        } catch (tf2::TransformException & ex) {
-            rclcpp::Clock steady_clock(RCL_STEADY_TIME);
-            RCLCPP_WARN_THROTTLE(
-              get_logger(), steady_clock, 1.0,
-              "XThe tf from '%s' to '%s' is not available.",
-              objMsg->header.frame_id.c_str(), pedsMsg.header.frame_id.c_str());
-            idx++;
-            continue;
-        }
-
-        pedMsg.pedestrian.pose.x = odom_point.point.x;
-        pedMsg.pedestrian.pose.y = odom_point.point.y;
-        pedMsg.pedestrian.pose.theta = atan2(data.position[1], data.position[0]);
-        peopleLocationsMap[pedMsg.pedestrian.identifier] = pedMsg.pedestrian.pose;
-
-        const auto& match = mCachedPeopleLocationsMap.find(pedMsg.pedestrian.identifier);
-        if (match != mCachedPeopleLocationsMap.end())
-        {
-            const auto& cachePose = match->second;
-            pedMsg.pedestrian.velocity.x = (pedMsg.pedestrian.pose.x - cachePose.x) / deltaT;
-            pedMsg.pedestrian.velocity.y = (pedMsg.pedestrian.pose.y - cachePose.y) / deltaT;
-            pedMsg.pedestrian.velocity.theta = (pedMsg.pedestrian.pose.theta - cachePose.theta) / deltaT;
-        }
-        else
-        {
-          pedMsg.pedestrian.velocity.x = 0.0;
-          pedMsg.pedestrian.velocity.y = 0.0;
-          pedMsg.pedestrian.velocity.theta = 0.0;
-        }
-
-
-        pedMsg.covariance[0] = objMsg->objects[idx].position_covariance[0];  // xx is index 0
-        pedMsg.covariance[1] = objMsg->objects[idx].position_covariance[1];  // xy is index 1.
-        // xz is index 2, skipping.
-        pedMsg.covariance[2] = objMsg->objects[idx].position_covariance[1];  // yx is the same as xy.
-        pedMsg.covariance[3] = objMsg->objects[idx].position_covariance[3];  // yy is index 3
-        pedsMsg.pedestrians.push_back(pedMsg);
-    }
     // at the end of the loop
     idx++;
   }
 
-  mCachedPeopleLocationsMap.swap(peopleLocationsMap);
-  mCachedPeopleStamp = t;
-  init = true;
-
   //DEBUG_STREAM_OD("Publishing OBJ DET message");
   mPubObjDet->publish(std::move(objMsg));
 
-  mPubObjDetPed->publish(pedsMsg);
+  mPedTracker->update(objects, t);
+  mPubObjDetPed->publish(mPedTracker->getMsg());
 
   // ----> Diagnostic information update
   mObjDetElabMean_sec->addValue(odElabTimer.toc());

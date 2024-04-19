@@ -333,9 +333,7 @@ private:
   bool mObjDetBodyFitting = false;
   sl::OBJECT_DETECTION_MODEL mObjDetModel = sl::OBJECT_DETECTION_MODEL::MULTI_CLASS_BOX_FAST;
   sl::OBJECT_FILTERING_MODE mObjFilterMode = sl::OBJECT_FILTERING_MODE::NMS3D;
-  std::unordered_map<std::string, geometry_msgs::msg::Pose2D> mCachedPeopleLocationsMap;
-  rclcpp::Time mCachedPeopleStamp;
-
+  std::shared_ptr<PedTracker> mPedTracker = nullptr;
   bool mBodyTrkEnabled = false;
   sl::BODY_TRACKING_MODEL mBodyTrkModel = sl::BODY_TRACKING_MODEL::HUMAN_BODY_FAST;
   sl::BODY_FORMAT mBodyTrkFmt = sl::BODY_FORMAT::BODY_38;
