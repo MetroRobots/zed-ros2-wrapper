@@ -35,6 +35,7 @@
 /* Author: David V. Lu!! */
 
 #include "ped_tracker.hpp"
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
 namespace stereolabs
 {
