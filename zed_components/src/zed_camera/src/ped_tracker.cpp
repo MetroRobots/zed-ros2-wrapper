@@ -70,6 +70,11 @@ PedTracker::PedTracker(rclcpp::Node& node, const tf2_ros::Buffer& tf_buffer, con
   node.get_parameter("pos_tracking.kalman.p", kalman_p_);
   node.get_parameter("pos_tracking.kalman.q", kalman_q_);
   node.get_parameter("pos_tracking.kalman.r", kalman_r_);
+
+  node.declare_parameter("pos_tracking.fov_edge", 0.9);
+  node.declare_parameter("pos_tracking.fov_history", 10);
+  node.get_parameter("pos_tracking.fov_edge", fov_edge_cutoff_);
+  node.get_parameter("pos_tracking.fov_history", fov_history_cutoff_);
 }
 
 void PedTracker::update(const sl::Objects& objects, const rclcpp::Time& t)
@@ -140,6 +145,7 @@ social_nav_msgs::msg::PedestriansWithCovariance PedTracker::getMsg()
 PedTracker::TrackedPed::TrackedPed(PedTracker& parent, int label_id) : parent_(parent)
 {
   label_ = "Person" + std::to_string(label_id);
+  count_ = 0;
 }
 
 void PedTracker::TrackedPed::update(const geometry_msgs::msg::PointStamped& point)
@@ -157,6 +163,8 @@ void PedTracker::TrackedPed::update(const geometry_msgs::msg::PointStamped& poin
     return;
   }
 
+  double raw_angle = atan2(point.point.y, point.point.x);
+
   TrackPoint latest = TrackPoint(target_point);
   if (points_.empty())
   {
@@ -164,6 +172,10 @@ void PedTracker::TrackedPed::update(const geometry_msgs::msg::PointStamped& poin
     x_.push_back(0.0);
     p_.push_back(parent_.kalman_p_);
     p_.push_back(parent_.kalman_p_);
+  }
+  else if (abs(raw_angle) > parent_.fov_edge_cutoff_ && count_ < parent_.fov_history_cutoff_)
+  {
+    // ignore initial large velocities
   }
   else
   {
@@ -179,6 +191,7 @@ void PedTracker::TrackedPed::update(const geometry_msgs::msg::PointStamped& poin
   }
 
   points_.push(latest);
+  count_++;
 
   while (points_.size() > 2)
   {

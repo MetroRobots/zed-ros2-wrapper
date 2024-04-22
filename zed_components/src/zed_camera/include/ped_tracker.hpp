@@ -117,6 +117,8 @@ protected:
   // Params
   std::string source_frame_, target_frame_;
   double kalman_p_, kalman_q_, kalman_r_;
+  double fov_edge_cutoff_;
+  int fov_history_cutoff_;
 
   class TrackedPed
   {
@@ -137,6 +139,7 @@ protected:
     std::string label_;
     std::queue<TrackPoint> points_;
     std::vector<double> p_, x_;
+    unsigned int count_;
   };
 
   std::unordered_map<int, TrackedPed> ped_map_;
