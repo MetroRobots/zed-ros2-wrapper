@@ -105,6 +105,7 @@ public:
   PedTracker(rclcpp::Node& node, const tf2_ros::Buffer& tf_buffer, const std::string& source_frame);
 
   void update(const sl::Objects& objects, const rclcpp::Time& t);
+  void updateSingle(unsigned int id, const geometry_msgs::msg::PointStamped& point);
 
   social_nav_msgs::msg::PedestriansWithCovariance getMsg();
 
@@ -112,7 +113,6 @@ protected:
   const tf2_ros::Buffer& tf_buffer_;
   rclcpp::Logger logger_;
   rclcpp::Time cached_stamp_;
-  bool time_initialized_{false};
 
   // Params
   std::string source_frame_, target_frame_;

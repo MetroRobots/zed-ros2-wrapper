@@ -80,27 +80,11 @@ PedTracker::PedTracker(rclcpp::Node& node, const tf2_ros::Buffer& tf_buffer, con
 
 void PedTracker::update(const sl::Objects& objects, const rclcpp::Time& t)
 {
-  double deltaT;
-  if (time_initialized_)
-  {
-    deltaT = (t - cached_stamp_).seconds();
-  }
-  else
-  {
-    deltaT = 0.1;
-  }
-
   for (auto data : objects.object_list)
   {
     if (data.label != sl::OBJECT_CLASS::PERSON)
     {
       continue;
-    }
-
-    auto track = ped_map_.find(data.id);
-    if (track == ped_map_.end())
-    {
-      ped_map_.insert(std::make_pair(data.id, TrackedPed(*this, data.id)));
     }
 
     geometry_msgs::msg::PointStamped cam_point;
@@ -110,11 +94,21 @@ void PedTracker::update(const sl::Objects& objects, const rclcpp::Time& t)
     cam_point.point.y = data.position[1];
     cam_point.point.z = data.position[2];
 
-    track->second.update(cam_point);
+    updateSingle(data.id, cam_point);
   }
-
   cached_stamp_ = t;
-  time_initialized_ = true;
+}
+
+void PedTracker::updateSingle(unsigned int id, const geometry_msgs::msg::PointStamped &point)
+{
+  auto track = ped_map_.find(id);
+  if (track == ped_map_.end())
+  {
+    ped_map_.insert(std::make_pair(id, TrackedPed(*this, id)));
+    track = ped_map_.find(id);
+  }
+  track->second.update(point);
+  cached_stamp_ = point.header.stamp;
 }
 
 social_nav_msgs::msg::PedestriansWithCovariance PedTracker::getMsg()
