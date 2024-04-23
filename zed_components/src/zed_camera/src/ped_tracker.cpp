@@ -90,12 +90,10 @@ void PedTracker::update(const sl::Objects& objects, const rclcpp::Time& t)
     deltaT = 0.1;
   }
 
-  size_t idx = 0;
   for (auto data : objects.object_list)
   {
     if (data.label != sl::OBJECT_CLASS::PERSON)
     {
-      idx++;
       continue;
     }
 
@@ -113,7 +111,6 @@ void PedTracker::update(const sl::Objects& objects, const rclcpp::Time& t)
     cam_point.point.z = data.position[2];
 
     track->second.update(cam_point);
-    idx++;
   }
 
   cached_stamp_ = t;
