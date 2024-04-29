@@ -36,6 +36,7 @@
 
 #include "ped_tracker.hpp"
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+#include <angles/angles.h>
 
 namespace stereolabs
 {
@@ -55,7 +56,9 @@ void TrackPoint::combine(const TrackPoint& prev)
   double vx = dx_ / dt_;
   double vy = dy_ / dt_;
   vm_ = hypot(vx, vy);
-  vtheta_ = atan2(vy, vx);
+
+  double raw_angle = atan2(vy, vx);
+  vtheta_ = prev.vm_ + angles::shortest_angular_distance(prev.vm_, raw_angle);
 }
 
 PedTracker::PedTracker(rclcpp::Node& node, const tf2_ros::Buffer& tf_buffer, const std::string& source_frame)
