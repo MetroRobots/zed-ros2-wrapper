@@ -108,17 +108,21 @@ public:
   void updateSingle(unsigned int id, const geometry_msgs::msg::PointStamped& point);
 
   social_nav_msgs::msg::PedestriansWithCovariance getMsg();
+  void odomCb(const nav_msgs::msg::Odometry::SharedPtr msg);
 
 protected:
   const tf2_ros::Buffer& tf_buffer_;
   rclcpp::Logger logger_;
   rclcpp::Time cached_stamp_;
+  rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
+  nav_msgs::msg::Odometry odom_;
 
   // Params
   std::string source_frame_, target_frame_;
   double kalman_p_, kalman_q_, kalman_r_;
   double fov_edge_cutoff_;
   int fov_history_cutoff_;
+  double theta_noise_factor_;
 
   class TrackedPed
   {

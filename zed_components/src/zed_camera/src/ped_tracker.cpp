@@ -79,6 +79,12 @@ PedTracker::PedTracker(rclcpp::Node& node, const tf2_ros::Buffer& tf_buffer, con
   node.declare_parameter("pos_tracking.fov_history", 10);
   node.get_parameter("pos_tracking.fov_edge", fov_edge_cutoff_);
   node.get_parameter("pos_tracking.fov_history", fov_history_cutoff_);
+
+  node.declare_parameter("pos_tracking.theta_noise_factor", 50.0);
+  node.get_parameter("pos_tracking.theta_noise_factor", theta_noise_factor_);
+
+  odom_sub_ = node.create_subscription<nav_msgs::msg::Odometry>(
+      "/odom", 1, std::bind(&PedTracker::odomCb, this, std::placeholders::_1));
 }
 
 void PedTracker::update(const sl::Objects& objects, const rclcpp::Time& t)
@@ -102,7 +108,7 @@ void PedTracker::update(const sl::Objects& objects, const rclcpp::Time& t)
   cached_stamp_ = t;
 }
 
-void PedTracker::updateSingle(unsigned int id, const geometry_msgs::msg::PointStamped &point)
+void PedTracker::updateSingle(unsigned int id, const geometry_msgs::msg::PointStamped& point)
 {
   auto track = ped_map_.find(id);
   if (track == ped_map_.end())
@@ -135,6 +141,11 @@ social_nav_msgs::msg::PedestriansWithCovariance PedTracker::getMsg()
   }
 
   return pedsMsg;
+}
+
+void PedTracker::odomCb(const nav_msgs::msg::Odometry::SharedPtr msg)
+{
+  odom_ = *msg;
 }
 
 PedTracker::TrackedPed::TrackedPed(PedTracker& parent, int label_id) : parent_(parent)
@@ -176,10 +187,12 @@ void PedTracker::TrackedPed::update(const geometry_msgs::msg::PointStamped& poin
   {
     latest.combine(points_.back());
     std::vector<double> values = {latest.vm(), latest.vtheta()};
+    double obs_noise =
+        (1.0 + parent_.theta_noise_factor_ * abs(parent_.odom_.twist.twist.angular.z)) * parent_.kalman_r_;
     for (unsigned int i = 0; i < values.size(); i++)
     {
       p_[i] += parent_.kalman_q_;
-      double k = p_[i] / (p_[i] + parent_.kalman_r_);
+      double k = p_[i] / (p_[i] + obs_noise);
       x_[i] += k * (values[i] - x_[i]);
       p_[i] = (1 - k) * p_[i];
     }
