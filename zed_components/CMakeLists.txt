@@ -214,6 +214,15 @@ ament_target_dependencies(zed_camera_component
     ${DEPENDENCIES}
 )
 
+add_executable(demo src/demo.cpp)
+ament_target_dependencies(demo
+    ${DEPENDENCIES}
+)
+target_link_libraries(demo zed_camera_component
+    
+)
+
+
 rclcpp_components_register_nodes(zed_camera_component "stereolabs::ZedCamera")
 set(node_plugins "${node_plugins}stereolabs::ZedCamera;$<TARGET_FILE:zed_camera_component>\n")
 
@@ -223,6 +232,11 @@ install(TARGETS zed_camera_component
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
+
+install(TARGETS
+  demo
+  DESTINATION lib/${PROJECT_NAME})
+
 
 # Install header files
 install(DIRECTORY

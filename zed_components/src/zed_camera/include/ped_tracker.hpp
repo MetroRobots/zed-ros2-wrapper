@@ -89,7 +89,9 @@ public:
     return vtheta_;
   }
 
-  void combine(const TrackPoint& prev);
+  void combine(const TrackPoint& prev, bool debug = false);
+
+  static rclcpp::Logger* logger;
 
 protected:
   geometry_msgs::msg::PointStamped point_;
