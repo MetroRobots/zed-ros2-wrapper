@@ -527,6 +527,25 @@ private:
 
   geoPosePub mPubGeoPose;
   poseStatusPub mPubGeoPoseStatus;
+
+  pointcloudPub mPubCleanCloud;
+  bool mCleanCloudEnable = true;
+  bool mFlattenCleanCloud = true;
+  pointcloudMsgPtr mCleanCloud = nullptr;
+  double mCleanMinZ = 0.15;
+  double mCleanMaxZ = 1.2;
+  double mCleanAngularRange = 1.68;
+  double mCleanAngularIncrement = M_PI / 180;
+  double mFlatOutputZ = 0.0;
+  std::vector<float> mCleanRanges;
+  std::vector<std::pair<float, float>> mCleanPoints;
+  std::string mCleanFrame = "odom";
+  void publishCleanPointCloud(const sl::Objects& objects);
+  void publishFlatPointCloud(const sl::Objects& objects);
+  inline int getLaserIndex(double angle) const
+  {
+      return (angle + mCleanAngularRange / 2) / mCleanAngularIncrement;
+  }
   // <---- Publishers
 
   // <---- Publisher variables
