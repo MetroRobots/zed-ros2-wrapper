@@ -58,7 +58,8 @@ void TrackPoint::combine(const TrackPoint& prev)
   vm_ = hypot(vx, vy);
 
   double raw_angle = atan2(vy, vx);
-  vtheta_ = prev.vm_ + angles::shortest_angular_distance(prev.vm_, raw_angle);
+  double diff = angles::shortest_angular_distance(prev.vtheta_, raw_angle);
+  vtheta_ = prev.vtheta_ + diff;
 }
 
 PedTracker::PedTracker(rclcpp::Node& node, const tf2_ros::Buffer& tf_buffer, const std::string& source_frame)
