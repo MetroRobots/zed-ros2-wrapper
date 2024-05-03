@@ -87,6 +87,8 @@ PedTracker::PedTracker(rclcpp::Node& node, const tf2_ros::Buffer& tf_buffer, con
   node.declare_parameter("pos_tracking.theta_noise_factor", 50.0);
   node.get_parameter("pos_tracking.theta_noise_factor", theta_noise_factor_);
 
+  RCLCPP_INFO(logger_, "THETA NOISE FACTOR %f", theta_noise_factor_);
+
   odom_sub_ = node.create_subscription<nav_msgs::msg::Odometry>(
       "/odom", 1, std::bind(&PedTracker::odomCb, this, std::placeholders::_1));
 }
