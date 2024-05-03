@@ -37,6 +37,8 @@
 #error Unsupported ROS2 distro
 #endif
 
+#include <tf2_sensor_msgs/tf2_sensor_msgs.h>
+
 #include <sl/Camera.hpp>
 
 #include "sl_tools.hpp"
@@ -1614,6 +1616,22 @@ void ZedCamera::getOdParams()
 
   RCLCPP_INFO(
     get_logger(), " * Obj. Det. QoS Durability: %s", sl_tools::qos2str(qos_durability).c_str());
+
+  getParam("object_detection.publish_clean_cloud", mCleanCloudEnable, mCleanCloudEnable);
+  getParam("object_detection.flatten_clean_cloud", mFlattenCleanCloud, mFlattenCleanCloud);
+  getParam("object_detection.clean_min_z", mCleanMinZ, mCleanMinZ);
+  getParam("object_detection.clean_max_z", mCleanMaxZ, mCleanMaxZ);
+  getParam("object_detection.clean_frame", mCleanFrame, mCleanFrame);
+  getParam("object_detection.clean_angular_range", mCleanAngularRange, mCleanAngularRange);
+  getParam("object_detection.clean_angular_increment", mCleanAngularIncrement, mCleanAngularIncrement);
+  getParam("object_detection.flat_output_z", mFlatOutputZ, mFlatOutputZ);
+
+  declare_parameter("object_detection.angle_margin", 0.1);
+  declare_parameter("object_detection.depth_margin", 0.1);
+
+  uint32_t ranges_size = std::ceil(mCleanAngularRange / mCleanAngularIncrement);
+  mCleanRanges.resize(ranges_size);
+  mCleanPoints.resize(ranges_size);
 }
 
 void ZedCamera::getBodyTrkParams()
@@ -4310,6 +4328,13 @@ bool ZedCamera::startObjDetect()
     RCLCPP_INFO_STREAM(get_logger(), "Advertised on topic " << mPubObjDetPed->get_topic_name());
   }
 
+  if (mCleanCloudEnable && !mPubCleanCloud)
+  {
+    std::string pointcloud_topic = mTopicRoot + "point_cloud/clean_cloud";
+    mPubCleanCloud = create_publisher<sensor_msgs::msg::PointCloud2>(pointcloud_topic, mDepthQos);
+    RCLCPP_INFO_STREAM(get_logger(), "Advertised on topic: " << mPubCleanCloud->get_topic_name());
+  }
+
   if (!mPedTracker) {
     mPedTracker = std::make_shared<PedTracker>(*this, *mTfBuffer, mLeftCamFrameId);
   }
@@ -6935,11 +6960,253 @@ void ZedCamera::processDetectedObjects(rclcpp::Time t)
   mPedTracker->update(objects, t);
   mPubObjDetPed->publish(mPedTracker->getMsg());
 
+  if (mFlattenCleanCloud)
+  {
+    publishFlatPointCloud(objects);
+  }
+  else
+  {
+    publishCleanPointCloud(objects);
+  }
+
   // ----> Diagnostic information update
   mObjDetElabMean_sec->addValue(odElabTimer.toc());
   mObjDetPeriodMean_sec->addValue(odFreqTimer.toc());
   odFreqTimer.tic();
   // <---- Diagnostic information update
+}
+
+inline bool withinObject(float x, float y, float z, const sl::ObjectData& object)
+{
+    std::vector<sl::float3> box = object.bounding_box;
+    return x >= box[4][0] && x <= box[5][0] &&
+           y >= box[6][1] && y <= box[0][1]
+           /* Ignore Z coordinate && z >= box[5][2] && z <= box[3][2]*/
+           ;
+}
+
+inline bool withinObjects(float x, float y, float z, const sl::Objects& objects)
+{
+    for (auto object : objects.object_list) {
+        if (withinObject(x, y, z, object))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+void ZedCamera::publishCleanPointCloud(const sl::Objects& objects)
+{
+  if (!mCleanCloudEnable || count_subscribers(mPubCleanCloud->get_topic_name()) == 0)
+  {
+    return;
+  }
+
+  if (!mCleanCloud)
+  {
+    mCleanCloud = std::make_unique<sensor_msgs::msg::PointCloud2>();
+  }
+
+  // Initialize Point Cloud message
+  // https://github.com/ros/common_msgs/blob/jade-devel/sensor_msgs/include/sensor_msgs/point_cloud2_iterator.h
+
+  int width = mMatResol.width;
+  int height = mMatResol.height;
+
+  int ptsCount = width * height;
+
+  if (mSvoMode || mSimEnabled) {
+    // mCleanCloud->header.stamp = sl_tools::slTime2Ros(mZed.getTimestamp(sl::TIME_REFERENCE::CURRENT));
+    mCleanCloud->header.stamp = mFrameTimestamp;
+  } else {
+    mCleanCloud->header.stamp = sl_tools::slTime2Ros(mMatCloud.timestamp);
+  }
+
+  if (mCleanCloud->width != width || mCleanCloud->height != height) {
+    mCleanCloud->header.frame_id = mPointCloudFrameId;  // Set the header values of the ROS message
+
+    mCleanCloud->is_bigendian = false;
+    mCleanCloud->is_dense = false;
+
+    mCleanCloud->width = width;
+    mCleanCloud->height = height;
+
+    sensor_msgs::PointCloud2Modifier modifier(*mCleanCloud);
+    modifier.setPointCloud2Fields(
+      4, "x", 1, sensor_msgs::msg::PointField::FLOAT32, "y", 1,
+      sensor_msgs::msg::PointField::FLOAT32, "z", 1, sensor_msgs::msg::PointField::FLOAT32, "rgb",
+      1, sensor_msgs::msg::PointField::FLOAT32);
+  }
+
+  sl::Vector4<float> * cpu_cloud = mMatCloud.getPtr<sl::float4>();
+
+  // Data copy
+  float * ptCloudPtr = reinterpret_cast<float *>(&mCleanCloud->data[0]);
+  memcpy(ptCloudPtr, reinterpret_cast<float *>(cpu_cloud), ptsCount * 4 * sizeof(float));
+
+  // Remove points
+  sensor_msgs::PointCloud2Iterator<float> iter_x(*mCleanCloud, "x");
+  sensor_msgs::PointCloud2ConstIterator<float> iter_y(*mCleanCloud, "y");
+  sensor_msgs::PointCloud2ConstIterator<float> iter_z(*mCleanCloud, "z");
+
+  for (; iter_x != iter_x.end(); ++iter_x, ++iter_y, ++iter_z) {
+      if (*iter_z < mCleanMinZ || *iter_z > mCleanMaxZ || withinObjects(*iter_x, *iter_y, *iter_z, objects))
+      {
+          *iter_x = NAN;
+      }
+    }
+
+    if (mCleanFrame != mCleanCloud->header.frame_id) {
+    try {
+      static auto cloud = std::make_unique<sensor_msgs::msg::PointCloud2>();
+      mTfBuffer->transform(*mCleanCloud, *cloud, mCleanFrame, tf2::durationFromSec(0.05));
+      mPubCleanCloud->publish(*cloud);
+      return;
+    } catch (tf2::TransformException & ex) {
+      RCLCPP_ERROR_STREAM(this->get_logger(), "Clean Cloud Transform failure: " << ex.what());
+    }
+  }
+  mPubCleanCloud->publish(*mCleanCloud);
+}
+
+void ZedCamera::publishFlatPointCloud(const sl::Objects& objects)
+{
+  if (!mCleanCloudEnable || count_subscribers(mPubCleanCloud->get_topic_name()) == 0)
+  {
+    return;
+  }
+
+  if (!mCleanCloud)
+  {
+    mCleanCloud = std::make_unique<sensor_msgs::msg::PointCloud2>();
+  }
+
+  std::vector<float> objectDepths(objects.object_list.size());
+  std::vector<std::pair<int, int>> objectAngleIndices(objectDepths.size());
+
+  unsigned int oi = 0;
+  float angleFudge, distanceFudge;
+  get_parameter("object_detection.angle_margin", angleFudge);
+  get_parameter("object_detection.depth_margin", distanceFudge);
+
+  for (auto object : objects.object_list) {
+      std::vector<sl::float3>& box = object.bounding_box;
+      sl::float3& front_left = box.at(4);
+      sl::float3& front_right = box.at(7);
+      objectDepths[oi] = (front_left[0] * front_left[0] + front_left[1] * front_left[1]);
+      float minAngle = atan2(front_right[1], front_right[0]) - angleFudge;
+      float maxAngle = atan2(front_left[1], front_left[0]) + angleFudge;
+      objectAngleIndices[oi] = std::make_pair(getLaserIndex(minAngle), getLaserIndex(maxAngle));
+      // RCLCPP_INFO(get_logger(), "%d: %.2f (%.2f, %.2f) (%.2f, %.2f) %.2f %.2f", oi, objectDepths[oi], front_left[0] ,front_left[1],front_right[0], front_right[1],  minAngle, maxAngle);
+      oi++;
+  }
+
+  mCleanRanges.assign(mCleanRanges.size(), std::numeric_limits<double>::infinity());
+
+  sl::Vector4<float> * cpu_cloud = mMatCloud.getPtr<sl::float4>();
+  int ptsCount = mMatResol.width * mMatResol.height;
+  for (unsigned int i = 0; i < ptsCount; i++)
+  {
+    const sl::Vector4<float>& pt = cpu_cloud[i];
+
+    if (isnan(pt.x) || isnan(pt.y) || isnan(pt.z))
+    {
+      continue;
+    }
+    if (pt.z < mCleanMinZ || pt.z > mCleanMaxZ)
+    {
+        continue;
+    }
+
+    float rangeSq = pt.x * pt.x + pt.y * pt.y;
+    double angle = atan2(pt.y, pt.x);
+    if (std::abs(angle) > mCleanAngularRange / 2) {
+      continue;
+    }
+
+    // overwrite range at laserscan ray if new range is smaller
+    int index = getLaserIndex(angle);
+    int containObjectIndex = -1;
+    for (oi = 0; oi < objectDepths.size(); oi++)
+    {
+      if (objectAngleIndices[oi].first <= index && index <= objectAngleIndices[oi].second)
+      {
+          containObjectIndex = oi;
+          break;
+      }
+    }
+
+    if (containObjectIndex < 0 || rangeSq < objectDepths[containObjectIndex] - distanceFudge)
+    {
+        if (rangeSq < mCleanRanges[index]) {
+            mCleanRanges[index] = rangeSq;
+            mCleanPoints[index] = std::make_pair(pt.x, pt.y);
+        }
+    }
+    else
+    {
+        mCleanRanges[index] = objectDepths[containObjectIndex];
+        //float range = sqrt(objectDepths[containObjectIndex]) - distanceFudge;
+        //mCleanPoints[index] = std::make_pair(cos(angle) * range,
+        //                                     sin(angle) * range);
+        mCleanPoints[index] = std::make_pair(NAN, NAN);
+    }
+  }
+
+  if (mSvoMode || mSimEnabled) {
+    // mCleanCloud->header.stamp = sl_tools::slTime2Ros(mZed.getTimestamp(sl::TIME_REFERENCE::CURRENT));
+    mCleanCloud->header.stamp = mFrameTimestamp;
+  } else {
+    mCleanCloud->header.stamp = sl_tools::slTime2Ros(mMatCloud.timestamp);
+  }
+
+  if (mCleanCloud->width != mCleanRanges.size() || mCleanCloud->height != 1) {
+    mCleanCloud->header.frame_id = mPointCloudFrameId;  // Set the header values of the ROS message
+
+    mCleanCloud->is_bigendian = false;
+    mCleanCloud->is_dense = false;
+
+    mCleanCloud->width = mCleanRanges.size();
+    mCleanCloud->height = 1;
+
+    sensor_msgs::PointCloud2Modifier modifier(*mCleanCloud);
+    modifier.setPointCloud2Fields(
+      3, "x", 1, sensor_msgs::msg::PointField::FLOAT32, "y", 1,
+      sensor_msgs::msg::PointField::FLOAT32, "z", 1, sensor_msgs::msg::PointField::FLOAT32);
+  }
+
+
+  // Data Transfer
+  sensor_msgs::PointCloud2Iterator<float> iter_x(*mCleanCloud, "x");
+  sensor_msgs::PointCloud2Iterator<float> iter_y(*mCleanCloud, "y");
+  sensor_msgs::PointCloud2Iterator<float> iter_z(*mCleanCloud, "z");
+
+  for (unsigned int i = 0; i < mCleanRanges.size(); i++, ++iter_x, ++iter_y, ++iter_z)
+  {
+    if (!std::isfinite(mCleanRanges[i]))
+    {
+      *iter_x = NAN;
+    }
+    else
+    {
+        *iter_x = mCleanPoints[i].first;
+        *iter_y = mCleanPoints[i].second;
+        *iter_z = mFlatOutputZ;
+    }
+  }
+
+    if (mCleanFrame != mCleanCloud->header.frame_id) {
+    try {
+      static auto cloud = std::make_unique<sensor_msgs::msg::PointCloud2>();
+      mTfBuffer->transform(*mCleanCloud, *cloud, mCleanFrame, tf2::durationFromSec(0.05));
+      mPubCleanCloud->publish(*cloud);
+      return;
+    } catch (tf2::TransformException & ex) {
+      RCLCPP_ERROR_STREAM(this->get_logger(), "Clean Cloud Transform failure: " << ex.what());
+    }
+  }
+  mPubCleanCloud->publish(*mCleanCloud);
 }
 
 void ZedCamera::processBodies(rclcpp::Time t)
