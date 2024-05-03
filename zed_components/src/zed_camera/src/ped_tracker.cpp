@@ -49,7 +49,7 @@ TrackPoint::TrackPoint(const geometry_msgs::msg::PointStamped& pt)
 
 rclcpp::Logger* TrackPoint::logger = nullptr;
 
-void TrackPoint::combine(const TrackPoint& prev, bool debug)
+void TrackPoint::combine(const TrackPoint& prev)
 {
   dx_ = point_.point.x - prev.point_.point.x;
   dy_ = point_.point.y - prev.point_.point.y;
@@ -62,11 +62,6 @@ void TrackPoint::combine(const TrackPoint& prev, bool debug)
   double raw_angle = atan2(vy, vx);
   double diff = angles::shortest_angular_distance(prev.vtheta_, raw_angle);
   vtheta_ = prev.vtheta_ + diff;
-  using angles::to_degrees;
-  if (debug)
-    RCLCPP_INFO(*logger, "%c %f %f %f %f", vm_ > 0.2 ? '*' : ' ', to_degrees(prev.vtheta_), to_degrees(raw_angle),
-                to_degrees(diff), to_degrees(vtheta_));
-  // vtheta_ = raw_angle;
 }
 
 PedTracker::PedTracker(rclcpp::Node& node, const tf2_ros::Buffer& tf_buffer, const std::string& source_frame)

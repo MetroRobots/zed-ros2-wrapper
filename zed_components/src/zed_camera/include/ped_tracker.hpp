@@ -89,7 +89,7 @@ public:
     return vtheta_;
   }
 
-  void combine(const TrackPoint& prev, bool debug = false);
+  void combine(const TrackPoint& prev);
 
   static rclcpp::Logger* logger;
 
